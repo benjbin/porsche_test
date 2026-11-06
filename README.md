@@ -28,18 +28,27 @@ Puis http://localhost:8850 (un lien direct vers une teinte : `#5ZA`).
 
 **Le Nuancier** (plein écran) : toutes les teintes par famille, en vignettes du vrai rendu, la recherche et les favoris réunis. `G` ou « Nuancier » pour l'ouvrir, `/` ou « Rechercher » pour chercher (nom, code ou famille, en français ou en anglais), ♥ en haut pour l'ouvrir sur les favoris. Flèches pour se déplacer dans la grille, `Entrée` pour choisir (le nuancier se ferme, l'éventail tourne jusqu'à la teinte), `Échap` pour fermer. En mode Favoris : « Partager la sélection » (lien `#sel=`).
 
-**Clavier** : `←` `→` teinte voisine, `↑` `↓` famille précédente / suivante, `Début` / `Fin` première / dernière teinte, `F` favori, `C` face à face, `G` nuancier, `/` recherche, `Échap` fermer (ou annuler une rotation en cours).
+**Clavier** : `←` `→` teinte voisine, `↑` `↓` famille précédente / suivante, `Début` / `Fin` première / dernière teinte, `F` favori, `C` face à face (puis `1` `2` `3` modes, `S` décor, `L` loupe), `G` nuancier, `/` recherche, `Échap` fermer (ou annuler une rotation en cours).
 
-**L'étiquette** (en bas à gauche, dans le cadre d'épreuve) : Nº et code (toucher le code pour le copier), nom en Bodoni avec la finition en italique, perle de laque (survol : teinte écran approximative), famille et finition. À chaque changement, le compteur roule, le nom se révèle mot à mot et un éclat de laque balaie la carrosserie ; sur ordinateur, une lumière de studio suit la souris. Tout est coupé si « réduire les animations » est actif. En bas à droite : « Favori », « Comparer », « Exporter » (Story / carré / paysage en pleine résolution, ou partage du lien).
+**L'étiquette** (en bas à gauche, dans le cadre d'épreuve) : Nº et code (toucher le code pour le copier), nom en Poppins avec la finition en italique, perle de laque (survol : teinte écran approximative), famille et finition. À chaque changement, le compteur roule, le nom se révèle mot à mot et un éclat de laque balaie la carrosserie ; sur ordinateur, une lumière de studio suit la souris. Tout est coupé si « réduire les animations » est actif. En bas à droite : « Favori », « Comparer », « Exporter » (Story / carré / paysage en pleine résolution, ou partage du lien).
 
-Liens directs : `#5ZA` (teinte), `#cmp=5ZA,M4T` (face à face), `#sel=5ZA.M4T` (proposer une sélection à ajouter aux favoris).
+**Face à face** (outil de décision, `C` ou « Comparer ») : 2 à 4 finalistes. Depuis l'étiquette : la teinte affichée + vos favoris (sinon la teinte suivante de l'éventail) ; depuis le Nuancier en mode Favoris : « Comparer » (4 premiers favoris) ; appui long sur une lame : cette teinte face à la teinte affichée.
+
+- Bande des finalistes (en bas) : ✕ pour retirer (2 minimum), « + Ajouter » ouvre un sélecteur (recherche, vos favoris en tête, familles ; `↑` `↓` `Entrée`, `Échap`). Glisser une carte pour la déplacer (au doigt : appui puis glisser), ou `Alt` + `←` `→`.
+- Modes (`1` `2` `3`) : **Rideau** (deux teintes, rideau à glisser, toucher pour le poser, `←` `→` ; avec 3–4 finalistes, des pastilles choisissent la paire ; téléphone portrait : rideau horizontal), **Côte à côte** (même échelle, même cadrage « voiture seule » ; 2 → 2 colonnes, 3 → 3, 4 → 2 × 2 ou une rangée de 4 si la hauteur manque ; téléphone : rangées empilées), **Duel** (« Choisissez, on élimine » : cliquer / toucher, `←` `→`, ou balayer une teinte pour l'écarter ; la gagnante reste, la suivante entre ; verdict : « L'afficher dans le showroom » (ferme, affiche la teinte et l'ajoute aux favoris), « Recommencer le duel », « Partager » (copie le lien)).
+- Décors (`S`) : Studio (rendu d'origine), Gris neutre, Plein jour, Nuit. Hors Studio, la voiture est découpée par `_car.webp` et posée sur un fond neutre : seul le décor change, la laque reste celle du rendu.
+- Loupe (`L`, `Maj` maintenue, ou appui long au doigt ; Côte à côte et Duel) : le même point agrandi sur toutes les finalistes, depuis les rendus 3500 (chargés au premier usage, filet de progression), jamais au-delà de la résolution native.
+- Repères sous chaque teinte : famille · finition, clarté (L* CIE) et saturation (chroma) sur 100 (▲ = la plus élevée), « au quotidien » (indicatif).
+- `Échap` ferme d'abord le sélecteur, puis le face à face (le focus revient au bouton d'origine).
+
+Liens directs : `#5ZA` (teinte), `#cmp=5ZA,M4T[,3RR,GB0]&m=duel|rideau|cote&s=gris|jour|nuit|studio` (face à face, options facultatives et lues avec indulgence ; `#cmp=5ZA,M4T` reste valable), `#sel=5ZA.M4T` (proposer une sélection à ajouter aux favoris).
 
 ## Fichiers
 
 - `index.html`, `styles.css`, `app.js` — aucune dépendance
 - `colors.json` — 152 teintes : code, nom, hex, famille
 - `img/thumb/CODE.webp` — vignettes 640×256 (nuancier et carte d'aperçu)
-- `img/1200`, `img/2000`, `img/3500` — rendus + `_mask.webp` (silhouette pour faire passer le nom derrière la voiture)
+- `img/1200`, `img/2000`, `img/3500` — rendus + `_mask.webp` (silhouette pour faire passer le nom derrière la voiture) + `_car.webp` (voiture seule : carrosserie, roues, ombre de contact — décors du face à face)
 
 Les rendus et noms de teintes appartiennent à Porsche : prototype d'étude, à garder en local.
 

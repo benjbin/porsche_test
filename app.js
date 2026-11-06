@@ -680,6 +680,7 @@ function updateFav() {
   $("tFav")?.setAttribute("aria-label", `Favoris (${n})`);
   const sf = $("segFavN"); if (sf) sf.textContent = String(n);
   const sh = $("shareSel"); if (sh) sh.hidden = !(nu.fav && n > 0);
+  const cs = $("cmpSel"); if (cs) cs.hidden = !(nu.fav && n > 0);
 }
 
 function writeHash(h) {
@@ -1505,6 +1506,7 @@ function nuFilter() {
   $("segFav")?.setAttribute("aria-pressed", String(nu.fav));
   if (n !== nu.n) { nu.n = n; const ct = $("nuCount"); if (ct) ct.textContent = plural(n, "teinte"); }
   const sh = $("shareSel"); if (sh) sh.hidden = !(nu.fav && favs.size > 0);
+  const cs = $("cmpSel"); if (cs) cs.hidden = !(nu.fav && favs.size > 0);
   const em = $("nuEmpty");
   if (em) {
     em.hidden = n > 0;
@@ -1694,7 +1696,7 @@ function wireLpMenu() {
     const i = lpFor, c = COLORS[i];
     closeLpMenu();
     if (b.dataset.a === "fav") toggleFav(c.code);
-    else if (b.dataset.a === "cmp") openCompare(dest(), i, fanList);
+    else if (b.dataset.a === "cmp") openCompare([dest(), i], { opener: fanList });
     else if (b.dataset.a === "copy") toast((await copyText(c.code)) ? `Code ${c.code} copié` : "Copie impossible");
   });
   document.addEventListener("pointerdown", (e) => {
@@ -1833,108 +1835,944 @@ async function shareSelection() {
   toast((await copyText(url)) ? "Lien de la sélection copié" : "Copie impossible");
 }
 
-/* ---------- Comparaison ---------- */
+/* ---------- « Face à face » : 2 à 4 finalistes, trois modes, quatre décors, loupe synchronisée, repères ----------
+   Une seule géométrie pour toutes les finalistes (même échelle, même cadre « voiture seule » 2,5:1).
+   Décors autres que Studio : le rendu est découpé par le masque img/{taille}/_car.webp (carrosserie, roues,
+   ombre de contact) et posé sur un fond neutre — la laque, elle, reste exactement celle du rendu.
+   Images : chaque <img> ne garde que sa dernière demande (data-want), jamais une voiture périmée.
+   Mesures : dans cxLayout() (ouverture, changement, redimensionnement), jamais pendant un geste. */
 
-function cmpOptions() {
-  const opt = (c) => `<option value="${c.i}">${esc(c.name)} · ${c.code}</option>`;
-  const favList = [...favs].reverse().map((code) => COLORS[codeIndex.get(code.toUpperCase())]).filter(Boolean);
-  let html = favList.length ? `<optgroup label="Favoris">${favList.map(opt).join("")}</optgroup>` : "";
-  for (const [k, label] of FAMILIES) {
-    const list = COLORS.filter((c) => c.family === k);
-    if (list.length) html += `<optgroup label="${esc(label)}">${list.map(opt).join("")}</optgroup>`;
-  }
-  return html;
+const CX_MODES = ["rideau", "cote", "duel"];
+const CX_MODE_L = { rideau: "Rideau", cote: "Côte à côte", duel: "Duel" };
+const CX_STUDIOS = ["studio", "gris", "jour", "nuit"];
+const CX_STUDIO_L = { studio: "Studio", gris: "Gris neutre", jour: "Plein jour", nuit: "Nuit" };
+const CX_GRAD = { gris: [[189, 189, 187], [154, 154, 152]], jour: [[242, 241, 237], [217, 215, 209]], nuit: [[13, 14, 16], [26, 27, 30]] };
+const CX_MAX = 4, CX_MIN = 2;
+// Cadre « voiture seule », en fractions du rendu : centré sur la silhouette (21,4 %–85,1 % × 43,6 %–56,4 %), 2,5:1
+const CROP = { x: 0.1725, w: 0.72 };
+CROP.h = (CROP.w * IMG_W) / 2.5 / IMG_H;
+CROP.y = 0.5 - CROP.h / 2;
+const phonePortrait = matchMedia("(max-width: 640px) and (orientation: portrait)");
+const phoneLand = matchMedia("(max-height: 500px) and (orientation: landscape)");
+const ICON_X = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>';
+
+const cx = {
+  list: [], mode: "cote", studio: "gris", studioSet: false, pair: [], split: 50, splitPx: 0, splitRun: 0,
+  duel: null, gen: 0, W: 0, H: 0, cw: 0, pool: new Map(),
+  pop: { open: false, items: [], active: -1 },
+  loupe: { toggled: false, shift: false, touch: false, x: -1, y: -1, rects: [], lens: [], need: 0, done: 0, size: 220 },
+};
+const cxPanel = () => $("cmpPanel");
+const cxView = () => $("cxView");
+const cxColor = (i) => COLORS[i];
+const nativeMax = () => Math.floor((3500 / (devicePixelRatio || 1)) * CROP.w);   // largeur « voiture » max sans agrandir le 3500
+
+/* --- Couleur : CIE L*a*b* (D65) depuis la teinte de référence --- */
+function lab([r, g, b]) {
+  const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const R = lin(r), G = lin(g), B = lin(b);
+  const X = (0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047;
+  const Y = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+  const Z = (0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883;
+  const f = (t) => (t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116);
+  const fx = f(X), fy = f(Y), fz = f(Z);
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
 }
-function defaultB(a) {
-  for (const code of [...favs].reverse()) {
-    const i = codeIndex.get(code.toUpperCase());
-    if (i != null && i !== a) return i;
-  }
-  return (a + 1) % COLORS.length;
+// Repères : clarté (L*), saturation (chroma C*, 130 ≈ le bleu sRGB le plus vif), « au quotidien » (2 notes max)
+function marks(c) {
+  const [L, a, b] = lab(rgbOf(c.hex));
+  const notes = [];
+  if (L < 30) notes.push("Montre les micro-rayures et la poussière");
+  else if (L > 75) notes.push("Cache la poussière, montre les projections");
+  if (metal(c)) notes.push("Le métallisé masque les petites imperfections");
+  if (!notes.length) notes.push("Polyvalente au quotidien");
+  return { clar: Math.round(clamp(L, 0, 100)), sat: Math.round(clamp((Math.hypot(a, b) / 130) * 100, 0, 100)), notes: notes.slice(0, 2) };
 }
-function cmpShow(img, c) {
-  if (!img) return;
-  const side = img.closest(".side");
-  side?.style.setProperty("--paint", c.hex);
-  const j = setImg(img, c);
-  j.then(() => {
-    if (img._job !== j) return;
-    setNoImg(side, !showing(img, c.code));
+const famOne = (k) => FAMILIES.find((f) => f[0] === k)?.[2] ?? "";
+const nameHTML = (name) => { const [a, b] = splitName(name); return esc(a) + (b ? ` <em>${esc(b)}</em>` : ""); };
+
+/* --- Images : rendu + masque « voiture seule », course gagnée par la dernière demande --- */
+const cxSize = (wi, min = 2000) => SIZES.find((s) => s >= Math.max(min, wi * (devicePixelRatio || 1))) ?? SIZES[SIZES.length - 1];
+function cxImg(el, c, size, masked) {
+  const url = `img/${size}/${c.code}.webp`, mk = masked ? `img/${size}/_car.webp` : "";
+  const want = url + "|" + mk;
+  el.dataset.want = want;
+  const box = el.closest(".cx-car");
+  if (el.dataset.have === want) { el.style.visibility = ""; box?.classList.remove("noimg"); return Promise.resolve(true); }
+  if (el.dataset.code !== c.code) el.style.visibility = "hidden";          // jamais la voiture d'une autre teinte
+  return (async () => {
+    const [got, m] = await Promise.all([loadAny(c.code, url), mk ? load(mk) : Promise.resolve(true)]);
+    if (el.dataset.want !== want) return false;
+    if (!got) {
+      el.removeAttribute("src"); el.dataset.have = ""; el.dataset.code = "";
+      el.style.visibility = "hidden";
+      box?.classList.add("noimg");
+      return false;
+    }
+    const mask = mk && m ? `url("${mk}")` : "none";
+    el.style.webkitMaskImage = mask; el.style.maskImage = mask;
+    if (el.getAttribute("src") !== got) el.src = got;
+    el.dataset.code = c.code;
+    await decoded(el);
+    if (el.dataset.want !== want) return false;
+    el.dataset.have = got === url && (!mk || m) ? want : "";
+    el.style.visibility = "";
+    box?.classList.remove("noimg");
+    sampleBg(el, c.code);
+    const bg = bgCache.get(c.code);
+    if (bg) el.closest(".cx-cell, .cx-rs, .cx-verdict")?.style.setProperty("--sbg", rgbCss(bg));
+    return true;
+  })();
+}
+function cxPoolImg(code) {
+  let im = cx.pool.get(code);
+  if (!im) {
+    im = new Image();
+    im.alt = ""; im.decoding = "async"; im.draggable = false;
+    im.style.visibility = "hidden";
+    cx.pool.set(code, im);
+    if (cx.pool.size > 12) cx.pool.delete(cx.pool.keys().next().value);
+  }
+  return im;
+}
+
+/* --- Finalistes --- */
+function defaultFinalists(i = dest()) {
+  const f = [...favs].map((code) => codeIndex.get(code.toUpperCase())).filter((j) => j != null && j !== i);
+  return f.length ? [i, ...f].slice(0, CX_MAX) : [i, (i + 1) % COLORS.length];
+}
+function favFinalists() {
+  const f = [...favs].map((code) => codeIndex.get(code.toUpperCase())).filter((j) => j != null).slice(0, CX_MAX);
+  return f.length ? f : [dest()];
+}
+function cxNormalise(list) {
+  const out = [...new Set(list.filter((i) => i != null && COLORS[i]))].slice(0, CX_MAX);
+  if (!out.length) out.push(dest());
+  for (let j = (out[out.length - 1] + 1) % COLORS.length; out.length < CX_MIN; j = (j + 1) % COLORS.length) if (!out.includes(j)) out.push(j);
+  return out;
+}
+const defaultStudio = (mode) => (mode === "rideau" ? "studio" : "gris");
+
+function cxHash() {
+  if (!isOpen("cmpPanel")) return;
+  writeHash(`#cmp=${cx.list.map((i) => COLORS[i].code).join(",")}&m=${cx.mode}&s=${cx.studio}`);
+}
+function cxSay(msg) { const l = $("cxLive"); if (l) { l.textContent = ""; l.textContent = msg; } }
+
+function cxAdd(i) {
+  if (cx.list.length >= CX_MAX || cx.list.includes(i)) return false;
+  cx.list.push(i);
+  cxChanged(`${COLORS[i].name} ajoutée aux finalistes`);
+  return true;
+}
+function cxRemove(i) {
+  if (cx.list.length <= CX_MIN) return false;
+  const k = cx.list.indexOf(i);
+  if (k < 0) return false;
+  cx.list.splice(k, 1);
+  cxChanged(`${COLORS[i].name} retirée`);
+  return true;
+}
+function cxMove(i, d) {
+  const k = cx.list.indexOf(i), j = k + d;
+  if (k < 0 || j < 0 || j >= cx.list.length) return false;
+  [cx.list[k], cx.list[j]] = [cx.list[j], cx.list[k]];
+  cxChanged(`${COLORS[i].name} en position ${j + 1} sur ${cx.list.length}`);
+  return true;
+}
+// Liste modifiée : la paire du rideau reste valide, le duel repart de zéro
+function cxChanged(msg) {
+  cx.pair = cx.pair.filter((i) => cx.list.includes(i));
+  for (const i of cx.list) if (cx.pair.length < 2 && !cx.pair.includes(i)) cx.pair.push(i);
+  if (cx.duel) cx.duel = null;
+  cxRender();
+  if (msg) cxSay(msg);
+}
+
+/* --- Rendu --- */
+function cxRender() {
+  const panel = cxPanel();
+  if (!panel) return;
+  cx.gen++;
+  cxLoupeOff(true);
+  if (!cx.pair.length || cx.pair.some((i) => !cx.list.includes(i))) cx.pair = cx.list.slice(0, 2);
+  if (cx.mode === "duel" && !cx.duel) cxDuelStart();
+  const verdict = cx.mode === "duel" && cx.duel?.winner != null;
+  panel.dataset.mode = verdict ? "verdict" : cx.mode;
+  panel.dataset.studio = cx.studio;
+  panel.querySelectorAll("[data-m]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.m === cx.mode)));
+  panel.querySelectorAll("[data-s]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.s === cx.studio)));
+  const lb = $("cxLoupe");
+  if (lb) { lb.disabled = !cxLoupeOk(); lb.setAttribute("aria-pressed", String(cx.loupe.toggled && cxLoupeOk())); }
+  const cap = $("cxCap"); if (cap) cap.hidden = cx.studio === "studio";
+  cxStrip();
+  const v = cxView();
+  if (cx.mode === "rideau") cxRideau(v);
+  else if (verdict) cxVerdict(v);
+  else cxCells(v);
+  cxLayout();
+  if (cx.loupe.toggled && cxLoupeOk()) cxLoupeUpdate();
+  cxHash();
+}
+const cxLoupeOk = () => (cx.mode === "cote" || (cx.mode === "duel" && cx.duel?.winner == null));
+
+function cxStrip() {
+  const ol = $("cxStrip");
+  if (!ol) return;
+  const n = cx.list.length, out = new Set(cx.duel?.out ?? []);
+  ol.innerHTML = cx.list.map((i, k) => {
+    const c = COLORS[i];
+    return `<li class="cx-fin${out.has(i) ? " out" : ""}${cx.mode === "rideau" && cx.pair.includes(i) ? " in-pair" : ""}" data-i="${i}" style="--c:${c.hex};--metal:${metal(c)}">` +
+      `<button class="cx-fin-b" type="button" data-i="${i}" aria-roledescription="finaliste" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight" ` +
+      `aria-label="${esc(c.name)}, ${c.code}, finaliste ${k + 1} sur ${n}${out.has(i) ? ", écartée" : ""}. Alt et flèches pour déplacer.">` +
+      `<span class="cx-n mono">${String(k + 1).padStart(2, "0")}</span><i class="bead"></i>` +
+      `<span class="cx-fin-t"><b>${esc(heroName(c.name))}</b><span class="mono">${c.code}</span></span></button>` +
+      `<button class="cx-x" type="button" data-x="${i}" aria-label="Retirer ${esc(c.name)}"${n <= CX_MIN ? " disabled" : ""}>${ICON_X}</button></li>`;
+  }).join("") +
+    (n < CX_MAX ? `<li class="cx-addw"><button class="cx-add" id="cxAdd" type="button" aria-haspopup="dialog" aria-expanded="${cx.pop.open}" aria-controls="cxPop">` +
+      `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Ajouter</span><span class="mono">${n}/${CX_MAX}</span></button></li>` : "");
+}
+
+function cellHTML(i, k, best, extra = "") {
+  const c = COLORS[i], m = marks(c);
+  const up = (on) => (on ? ' <b class="cx-up" aria-label="le plus élevé">▲</b>' : "");
+  return `<div class="cx-cell" data-i="${i}" data-k="${k}" style="--c:${c.hex};--metal:${metal(c)}"${extra}>` +
+    `<div class="cx-car"><div class="cx-crop"><span class="cx-shadow"></span></div><span class="cx-flat mono">${esc(NOIMG_MSG)}</span></div>` +
+    `<div class="cx-meta">` +
+      `<p class="cx-id"><i class="bead"></i><span class="cx-nm">${nameHTML(c.name)}</span><span class="mono">${c.code}</span></p>` +
+      `<dl class="cx-rep">` +
+        `<div><dt>Famille · Finition</dt><dd>${esc(famOne(c.family))} · ${finishOf(c)}</dd></div>` +
+        `<div><dt>Clarté</dt><dd><span class="cx-meter"><i style="width:${m.clar}px"></i></span><span class="mono">${m.clar}${up(best.clar === i)}</span></dd></div>` +
+        `<div><dt>Saturation</dt><dd><span class="cx-meter"><i style="width:${m.sat}px"></i></span><span class="mono">${m.sat}${up(best.sat === i)}</span></dd></div>` +
+        `<div class="cx-q"><dt>Au quotidien <small>indicatif</small></dt><dd>${m.notes.map(esc).join("<br>")}</dd></div>` +
+      `</dl></div></div>`;
+}
+// ▲ : la plus claire / la plus saturée (aucune en cas d'égalité parfaite)
+function cxBest(list) {
+  const best = {};
+  for (const key of ["clar", "sat"]) {
+    const vals = list.map((i) => marks(COLORS[i])[key]), max = Math.max(...vals);
+    if (vals.filter((v) => v === max).length === 1 && vals.some((v) => v !== max)) best[key] = list[vals.indexOf(max)];
+  }
+  return best;
+}
+function cxFillCell(cell) {
+  const i = +cell.dataset.i, crop = cell.querySelector(".cx-crop");
+  const im = cxPoolImg(COLORS[i].code);
+  crop.append(im);
+}
+function cxCells(v) {
+  const duel = cx.mode === "duel" ? cx.duel : null;
+  const shown = duel ? [duel.left, duel.right] : cx.list;
+  const best = cxBest(shown);
+  const pick = (i, side) => ` role="button" tabindex="0" data-side="${side}" aria-label="Garder ${esc(COLORS[i].name)}"`;
+  v.innerHTML = (duel ? `<div class="cx-duel-h"><span class="mono">Duel ${duel.k} / ${duel.total}</span>` +
+      `<p>Choisissez<span>, on élimine</span></p><span class="mono cx-hint">${coarse.matches ? "Touchez ou balayez" : "Cliquez ou ← →"}</span></div>` : "") +
+    `<div class="cx-grid${duel ? " duel" : ""}" style="--n:${shown.length}">` +
+    shown.map((i, k) => cellHTML(i, k, best, duel ? pick(i, k ? "right" : "left") : "")).join("") + `</div>`;
+  v.querySelectorAll(".cx-cell").forEach(cxFillCell);
+}
+
+function cxRideau(v) {
+  const [a, b] = cx.pair.map(cxColor);
+  const lab = (c, s) => `<div class="cx-rlab ${s}"><span class="mono">${s.toUpperCase()} · ${c.code}</span><b>${nameHTML(c.name)}</b></div>`;
+  const side = (c, s) => `<div class="cx-rs ${s}" style="--c:${c.hex}"><div class="cx-car"><div class="cx-crop"><span class="cx-shadow"></span>` +
+    `<img alt="" decoding="async" draggable="false" style="visibility:hidden"></div><span class="cx-flat mono">${esc(NOIMG_MSG)}</span></div></div>`;
+  const chips = cx.list.length > 2 ? `<div class="cx-pair" role="group" aria-label="Teintes du rideau">` + cx.list.map((i) => {
+    const c = COLORS[i], on = cx.pair.includes(i);
+    return `<button type="button" class="cx-pc" data-p="${i}" aria-pressed="${on}" style="--c:${c.hex};--metal:${metal(c)}"><i class="bead"></i>${esc(heroName(c.name))}</button>`;
+  }).join("") + `</div>` : "";
+  v.innerHTML = `<div class="cx-rideau" id="cxRideau">${side(a, "a")}${side(b, "b")}` +
+    `<div class="cx-handle" id="cxHandle" role="slider" tabindex="0" aria-label="Rideau entre ${esc(a.name)} et ${esc(b.name)}" ` +
+    `aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(cx.split)}" style="--a:${a.hex};--b:${b.hex}"><span class="cx-knob"></span></div>` +
+    lab(a, "a") + lab(b, "b") + chips + `</div>`;
+}
+
+function cxVerdict(v) {
+  const d = cx.duel, c = COLORS[d.winner], [n1, n2] = splitName(c.name);
+  const out = d.out.map((i) => esc(heroName(COLORS[i].name)));
+  v.innerHTML = `<div class="cx-verdict" style="--c:${c.hex};--metal:${metal(c)}">` +
+    `<div class="cx-car big"><div class="cx-crop"><span class="cx-shadow"></span><img alt="Porsche 911 en ${esc(c.name)}" decoding="async" draggable="false" style="visibility:hidden"></div>` +
+    `<span class="cx-flat mono">${esc(NOIMG_MSG)}</span></div>` +
+    `<div class="cx-vtxt"><p class="mono">Votre teinte · ${c.code}</p>` +
+    `<h3 id="cxWin">${esc(n1)}${n2 ? ` <em>${esc(n2)}</em>` : ""}</h3>` +
+    `<p class="cx-vsub">${esc(famOne(c.family))} · ${finishOf(c)}${out.length ? `<span> — devant ${out.join(", ")}</span>` : ""}</p>` +
+    `<div class="cx-vbtns"><button class="btn cx-pri" id="cxShow" type="button">L'afficher dans le showroom</button>` +
+    `<button class="btn" id="cxAgain" type="button">Recommencer le duel</button>` +
+    `<button class="btn" id="cxShare" type="button">${ICON_COPY}<span>Partager</span></button></div></div></div>`;
+}
+
+/* --- Géométrie (mesurée ici seulement) --- */
+function cxPlace(el, cw) {
+  const wi = cxImgW(cw), hi = Math.round((wi * IMG_H) / IMG_W);
+  el.style.setProperty("--cw", cw + "px");
+  el.style.setProperty("--ch", Math.round(cw / 2.5) + "px");
+  el.style.setProperty("--wi", wi + "px");
+  el.style.setProperty("--hi", hi + "px");
+  el.style.setProperty("--ix", -Math.round(CROP.x * wi) + "px");
+  el.style.setProperty("--iy", -Math.round(CROP.y * hi) + "px");
+  return wi;
+}
+const cxImgW = (cw) => Math.round(cw / CROP.w);
+function snapPx(el) {
+  el.style.translate = "";
+  const r = el.getBoundingClientRect();
+  const dx = Math.round(r.left) - r.left, dy = Math.round(r.top) - r.top;
+  if (dx || dy) el.style.translate = `${dx.toFixed(3)}px ${dy.toFixed(3)}px`;
+}
+function cxLayout() {
+  const v = cxView(), panel = cxPanel();
+  if (!v || !panel?.classList.contains("open")) return;
+  const cs = getComputedStyle(v);
+  const W = Math.floor(v.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
+  const H = Math.floor(v.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
+  cx.W = W; cx.H = H;
+  const masked = cx.studio !== "studio", pp = phonePortrait.matches, pl = phoneLand.matches;
+  const verdict = panel.dataset.mode === "verdict";
+  if (cx.mode === "rideau") {
+    const rd = $("cxRideau");
+    if (!rd) return;
+    const vert = pp;
+    const cw = Math.max(120, Math.floor(Math.min(W * (vert ? 1 : 0.92), H * 0.9 * 2.5, nativeMax())));
+    const ch = Math.round(cw / 2.5);
+    const wi = cxPlace(rd, cw);
+    const ct = Math.round((H - ch) / 2 - (vert ? 0 : H * 0.04));
+    rd.style.setProperty("--cl", Math.round((W - cw) / 2) + "px");
+    rd.style.setProperty("--ct", ct + "px");
+    rd.style.setProperty("--kt", ct + Math.round(ch / 2) - 18 + "px");       // bouton du rideau : à hauteur de voiture
+    rd.style.setProperty("--kl", Math.round(W / 2) - 18 + "px");
+    rd.classList.toggle("vert", vert);
+    cx.vert = vert;
+    cxSplit(cx.split);
+    const size = cxSize(wi);
+    rd.querySelectorAll(".cx-rs").forEach((s, k) => cxImg(s.querySelector("img"), COLORS[cx.pair[k]], size, masked));
+    return;
+  }
+  if (verdict) {
+    const vd = v.querySelector(".cx-verdict");
+    if (!vd) return;
+    const side = pl || (W > H * 2.6 && W >= 900);
+    vd.classList.toggle("side", side);
+    const vs = getComputedStyle(vd);
+    const VW = W - parseFloat(vs.paddingLeft) - parseFloat(vs.paddingRight), VH = H - parseFloat(vs.paddingTop) - parseFloat(vs.paddingBottom);
+    const T = side ? 0 : vd.querySelector(".cx-vtxt").offsetHeight + 24;
+    const cw = Math.max(160, Math.floor(Math.min(side ? VW * 0.56 : VW, (VH - T) * 2.5, nativeMax(), 1200)));
+    const wi = cxPlace(vd, cw);
+    cxImg(vd.querySelector("img"), COLORS[cx.duel.winner], cxSize(wi), masked);
+    vd.querySelectorAll(".cx-car, .cx-vtxt").forEach(snapPx);       // centrage flex → calé sur le pixel
+    return;
+  }
+  const grid = v.querySelector(".cx-grid");
+  if (!grid) return;
+  const cells = [...grid.children], n = cells.length;
+  const head = v.querySelector(".cx-duel-h");
+  const gx = pp ? 0 : pl ? 16 : 32, gy = pp ? (head ? 20 : 32) : 28;
+  const extra = head ? head.offsetHeight + gy : 0;
+  const meta = grid.querySelector(".cx-meta");
+  const R = meta ? meta.offsetHeight : 0;
+  const MW = 280, MG = 24;                            // 2 × 2 « côte » : repères à droite de la voiture
+  const rowH = (rows) => (H - extra - (rows - 1) * gy) / rows;
+  const fit = (cols) => {
+    let cw = (W - (cols - 1) * gx) / cols;
+    if (!pp) cw = Math.min(cw, (rowH(Math.ceil(n / cols)) - (pl ? 0 : R)) * 2.5);
+    return Math.floor(cw);
+  };
+  const GS = 72;                                       // 2 × 2 « côte » : colonnes nettement séparées
+  const fitSide = (cols) => (rowH(Math.ceil(n / cols)) < R ? 0 : Math.floor(Math.min((W - (cols - 1) * GS) / cols - MG - MW, rowH(Math.ceil(n / cols)) * 2.5)));
+  let cols = pp ? 1 : n, side = false;
+  if (!pp && !pl && n === 4) {                          // 2 × 2 si la place le permet, sinon une rangée de 4
+    const under = fit(2), beside = fitSide(2), row = fit(4);
+    if (Math.max(under, beside) >= row * 0.9) { cols = 2; side = beside > under; }
+  }
+  const cw = Math.max(pp ? Math.min(W, 140) : 140, Math.min(side ? fitSide(cols) : fit(cols), nativeMax(), pp ? W : 720));
+  grid.classList.toggle("side", side);
+  grid.style.setProperty("--colw", (side ? cw + MG + MW : cw) + "px");
+  grid.style.setProperty("--cols", String(cols));
+  const gxx = side ? GS : gx;
+  grid.style.setProperty("--gx", gxx + "px");
+  grid.style.setProperty("--gy", gy + "px");
+  const wi = cxPlace(grid, cw);
+  cx.cw = cw;
+  // Centrage en px entiers (une marge automatique laisserait des demi-pixels)
+  const gw = cols * (side ? cw + MG + MW : cw) + (cols - 1) * gxx;
+  const ml = Math.max(0, Math.floor((W - gw) / 2));
+  grid.style.margin = `0 0 0 ${ml}px`;
+  const mt = Math.max(0, Math.floor((H - extra - grid.offsetHeight) / 2));
+  if (head) { head.style.margin = `${mt}px 0 ${gy}px ${ml}px`; head.style.width = gw + "px"; }
+  else grid.style.marginTop = mt + "px";
+  const size = cxSize(wi);
+  cells.forEach((cell) => {
+    const im = cell.querySelector("img");
+    if (im) cxImg(im, COLORS[+cell.dataset.i], size, masked);
   });
 }
 
+/* --- Rideau --- */
+function cxSplit(pct) {
+  cx.split = clamp(pct, 0, 100);
+  const rd = $("cxRideau");
+  if (!rd) return;
+  const len = cx.vert ? cx.H : cx.W;
+  const px = Math.round((len * cx.split) / 100);
+  cx.splitPx = px;
+  rd.style.setProperty("--sp", px + "px");
+  const h = $("cxHandle");
+  if (h) {
+    h.setAttribute("aria-valuenow", String(Math.round(cx.split)));
+    const [a, b] = cx.pair.map(cxColor);
+    h.setAttribute("aria-valuetext", `${Math.round(cx.split)} % ${a.name}, ${100 - Math.round(cx.split)} % ${b.name}`);
+  }
+}
+function cxSplitTo(pct) {
+  const run = ++cx.splitRun, from = cx.split, to = clamp(pct, 0, 100);
+  if (reduced.matches || document.hidden) return cxSplit(to);
+  const t0 = performance.now(), dur = 420;
+  const step = (t) => {
+    if (run !== cx.splitRun) return;
+    const k = clamp((t - t0) / dur, 0, 1);
+    cxSplit(from + (to - from) * EASE.out(k));
+    if (k < 1) frame(step);
+  };
+  frame(step);
+}
+
+/* --- Duel : la gagnante reste, la suivante entre --- */
+function cxDuelStart() {
+  const L = cx.list;
+  cx.duel = { left: L[0], right: L[1], next: 2, k: 1, total: L.length - 1, out: [], winner: null, busy: false };
+}
+function play(el, kf, opt) {
+  if (!el?.animate || reduced.matches) return Promise.resolve();
+  const a = el.animate(kf, opt);
+  return Promise.race([a.finished.catch(() => {}), sleep((opt.duration ?? 0) + (opt.delay ?? 0) + 80)]).then(() => {
+    try { a.finish(); } catch {}
+    a.cancel();
+  });
+}
+async function cxPick(side) {
+  const d = cx.duel;
+  if (!d || d.busy || d.winner != null || cx.mode !== "duel") return;
+  d.busy = true;
+  const gen = cx.gen;
+  const win = side === "left" ? d.left : d.right, lose = side === "left" ? d.right : d.left;
+  const grid = cxView()?.querySelector(".cx-grid");
+  const cells = grid ? [...grid.children] : [];
+  const wEl = cells.find((c) => +c.dataset.i === win), lEl = cells.find((c) => +c.dataset.i === lose);
+  const vert = phonePortrait.matches, dir = side === "left" ? 1 : -1;
+  cxLoupeOff(true);
+  wEl?.classList.add("won");
+  await play(lEl, [{ opacity: 1, translate: "0 0" }, { opacity: 0, translate: vert ? `0 ${dir * 40}px` : `${dir * 56}px 0` }],
+    { duration: 280, easing: "cubic-bezier(.55,0,1,.45)", fill: "forwards" });
+  if (gen !== cx.gen || cx.duel !== d) return;
+  d.out.push(lose);
+  if (d.next >= cx.list.length) {
+    d.winner = win; d.busy = false;
+    cxRender();
+    cxSay(`Votre teinte : ${COLORS[win].name}`);
+    $("cxShow")?.focus({ preventScroll: true });
+    return;
+  }
+  const first = wEl?.getBoundingClientRect();
+  d.left = win; d.right = cx.list[d.next++]; d.k++;
+  // La gagnante glisse vers la place de gauche (FLIP en translation), la nouvelle entre à droite
+  const best = cxBest([d.left, d.right]);
+  const head = cxView().querySelector(".cx-duel-h .mono");
+  if (head) head.textContent = `Duel ${d.k} / ${d.total}`;
+  const nEl = document.createElement("div");
+  nEl.innerHTML = cellHTML(d.right, 1, best, ` role="button" tabindex="0" data-side="right" aria-label="Garder ${esc(COLORS[d.right].name)}"`);
+  const fresh = nEl.firstElementChild;
+  const wNew = document.createElement("div");
+  wNew.innerHTML = cellHTML(d.left, 0, best, ` role="button" tabindex="0" data-side="left" aria-label="Garder ${esc(COLORS[d.left].name)}"`);
+  const wCell = wNew.firstElementChild;
+  grid.replaceChildren(wCell, fresh);
+  cxFillCell(wCell); cxFillCell(fresh);
+  cxLayout();
+  cxStrip();
+  if (cx.loupe.toggled) cxLoupeUpdate();
+  cxSay(`Duel ${d.k} sur ${d.total} : ${COLORS[d.left].name} contre ${COLORS[d.right].name}`);
+  const last = wCell.getBoundingClientRect();
+  const dx = first ? Math.round(first.left - last.left) : 0, dy = first ? Math.round(first.top - last.top) : 0;
+  const focusWas = document.activeElement?.closest?.(".cx-cell");
+  if (focusWas || document.activeElement === document.body) wCell.focus({ preventScroll: true });
+  await Promise.all([
+    (dx || dy) ? play(wCell, [{ translate: `${dx}px ${dy}px` }, { translate: "0 0" }], { duration: 380, easing: "cubic-bezier(.22,1,.36,1)" }) : null,
+    play(fresh, [{ opacity: 0, translate: vert ? "0 32px" : "48px 0" }, { opacity: 1, translate: "0 0" }], { duration: 360, delay: 90, easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" }),
+  ]);
+  if (cx.duel === d) d.busy = false;
+}
+function cxShowWinner() {
+  const i = cx.duel?.winner;
+  if (i == null) return;
+  const code = COLORS[i].code;
+  closePanels();
+  if (!favs.has(code)) toggleFav(code);
+  if (i === dest()) centreFan(i);
+  else goTo(i, D.paint);
+}
+async function cxShare() {
+  const d = cx.duel, codes = d?.winner != null ? [d.winner, ...cx.list.filter((i) => i !== d.winner)] : cx.list;
+  const url = location.href.split("#")[0] + `#cmp=${codes.map((i) => COLORS[i].code).join(",")}&m=cote&s=${cx.studio}`;
+  toast((await copyText(url)) ? "Lien du face à face copié" : "Copie impossible");
+}
+
+/* --- Loupe synchronisée (rendus 3500, ≥ 1 px image par px physique) --- */
+const cxLoupeOn = () => cxLoupeOk() && (cx.loupe.toggled || cx.loupe.shift || cx.loupe.touch);
+function cxLoupeUpdate() {
+  const L = cx.loupe, panel = cxPanel();
+  const on = cxLoupeOn();
+  panel?.classList.toggle("loupe", on);
+  panel?.classList.toggle("loupe-t", cx.loupe.toggled && cxLoupeOk());
+  $("cxLoupe")?.setAttribute("aria-pressed", String(L.toggled && cxLoupeOk()));
+  if (!on) { L.lens.forEach((x) => x.el.remove()); L.lens = []; return; }
+  if (!L.lens.length) cxLoupeBuild();
+  cxLoupeMove(L.x, L.y);
+}
+function cxLoupeOff(all = false) {
+  const L = cx.loupe;
+  L.shift = false; L.touch = false;
+  if (all && !cxLoupeOk()) L.toggled = false;
+  L.lens.forEach((x) => x.el.remove()); L.lens = [];
+  cxPanel()?.classList.remove("loupe");
+  if (all) cxPanel()?.classList.toggle("loupe-t", L.toggled && cxLoupeOk());
+}
+function cxLoupeRects() {
+  cx.loupe.rects = [...(cxView()?.querySelectorAll(".cx-cell .cx-car") ?? [])].map((car) => ({ car, r: car.getBoundingClientRect() }));
+}
+function cxLoupeBuild() {
+  const L = cx.loupe, masked = cx.studio !== "studio";
+  L.size = phonePortrait.matches || phoneLand.matches ? 150 : 220;
+  cxLoupeRects();
+  const dpr = devicePixelRatio || 1;
+  L.lw = Math.max(cxImgW(cx.cw), Math.min(Math.floor(3500 / dpr), Math.round(cxImgW(cx.cw) * 3.5)));   // ≈ ×3,5, jamais au-delà du 3500 natif
+  L.lh = Math.round((L.lw * IMG_H) / IMG_W);
+  const prog = $("cxProg");
+  L.need = L.rects.length; L.done = 0;
+  const gen = cx.gen;
+  L.lens = L.rects.map(({ car }) => {
+    const cell = car.closest(".cx-cell"), c = COLORS[+cell.dataset.i];
+    const el = document.createElement("div");
+    el.className = "cx-lens";
+    el.style.setProperty("--ls", L.size + "px");
+    el.innerHTML = `<span class="cx-lw"><img alt="" decoding="async" draggable="false" style="visibility:hidden;width:${L.lw}px;height:${L.lh}px"></span><span class="cx-ln mono">${esc(heroName(c.name))}</span>`;
+    el.querySelector(".cx-lw").style.background = masked ? "var(--lbg)" : (bgCache.get(c.code) ? rgbCss(bgCache.get(c.code)) : "var(--c)");
+    cell.append(el);
+    const img = el.querySelector("img");
+    cxImg(img, c, 3500, masked).then(() => {
+      if (gen !== cx.gen) return;
+      L.done++;
+      cxProgress();
+    });
+    return { el, img, car };
+  });
+  cxProgress();
+  if (prog) prog.hidden = L.done >= L.need;
+}
+function cxProgress() {
+  const L = cx.loupe, prog = $("cxProg");
+  if (!prog) return;
+  const left = L.need && L.done < L.need && cxLoupeOn();
+  prog.hidden = !left;
+  prog.firstElementChild?.style.setProperty("width", `${Math.round(((L.done + 0.15) / Math.max(1, L.need)) * 100)}%`);
+}
+function cxLoupeMove(x, y) {
+  const L = cx.loupe;
+  if (!L.lens.length) return;
+  let hit = L.rects.find(({ r }) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+  if (!hit && x < 0) hit = L.rects[0] && { r: L.rects[0].r, centre: true };   // clavier : loupe au centre
+  L.lens.forEach((ln) => ln.el.classList.toggle("on", !!hit));
+  if (!hit) return;
+  const r = hit.r;
+  const u = hit.centre ? 0.5 : clamp((x - r.left) / (r.width || 1), 0, 1), v = hit.centre ? 0.5 : clamp((y - r.top) / (r.height || 1), 0, 1);
+  const g = CX_GRAD[cx.studio];
+  if (g) {
+    const lerp = (k) => Math.round(g[0][k] + (g[1][k] - g[0][k]) * v);
+    cxView()?.style.setProperty("--lbg", `rgb(${lerp(0)} ${lerp(1)} ${lerp(2)})`);
+  }
+  const R = L.size / 2, fx = CROP.x + u * CROP.w, fy = CROP.y + v * CROP.h;
+  const cw = cx.cw, ch = Math.round(cw / 2.5);
+  const lx = Math.round(u * cw - R), ly = Math.round(v * ch - R);
+  const ix = Math.round(R - fx * L.lw), iy = Math.round(R - fy * L.lh);
+  L.lens.forEach((ln) => {
+    ln.el.style.translate = `${lx}px ${ly}px`;
+    ln.img.style.translate = `${ix}px ${iy}px`;
+  });
+}
+
+/* --- Sélecteur de teinte (popover, sans <select>) --- */
+function cxPopOpen() {
+  const pop = $("cxPop"), add = $("cxAdd");
+  if (!pop || !add || cx.list.length >= CX_MAX) return;
+  cx.pop.open = true;
+  pop.hidden = false;
+  add.setAttribute("aria-expanded", "true");
+  const q = $("cxQ");
+  q.value = "";
+  cxPopFill("");
+  if (!phonePortrait.matches) {
+    const r = add.getBoundingClientRect(), pw = Math.min(380, innerWidth - 32);
+    pop.style.left = Math.round(clamp(r.left, 16, innerWidth - pw - 16)) + "px";
+    pop.style.bottom = Math.round(innerHeight - r.top + 8) + "px";
+    pop.style.maxHeight = Math.min(480, Math.max(200, Math.round(r.top - 96))) + "px";
+    pop.style.width = pw + "px";
+  } else { pop.removeAttribute("style"); pop.style.maxHeight = Math.round(innerHeight * 0.72) + "px"; }
+  q.focus({ preventScroll: true });
+}
+function cxPopClose(refocus = true) {
+  const pop = $("cxPop");
+  if (!pop || !cx.pop.open) return false;
+  cx.pop.open = false;
+  pop.hidden = true;
+  const add = $("cxAdd");
+  add?.setAttribute("aria-expanded", "false");
+  if (refocus) (add ?? cxPanel()?.querySelector(".cx-fin-b"))?.focus({ preventScroll: true });
+  return true;
+}
+function cxPopFill(q) {
+  const list = $("cxList"), m = matcher(q);
+  if (!list) return;
+  const taken = new Set(cx.list);
+  const opt = (c, pre) => `<div class="cx-opt" role="option" id="cxo-${pre}${c.code}" data-i="${c.i}" aria-disabled="${taken.has(c.i)}" aria-selected="false" style="--c:${c.hex};--metal:${metal(c)}">` +
+    `<i class="bead"></i><span>${esc(c.name)}</span><span class="mono">${taken.has(c.i) ? "déjà là" : c.code}</span></div>`;
+  let html = "";
+  const fl = [...favs].map((code) => COLORS[codeIndex.get(code.toUpperCase())]).filter((c) => c && (!m || m(c)));
+  if (fl.length) html += `<div role="group" aria-labelledby="cxg-f"><p class="cx-gh mono" id="cxg-f">Vos favoris</p>${fl.map((c) => opt(c, "f-")).join("")}</div>`;
+  for (const [k, lbl] of FAMILIES) {
+    const l = COLORS.filter((c) => c.family === k && (!m || m(c)));
+    if (l.length) html += `<div role="group" aria-labelledby="cxg-${k}"><p class="cx-gh mono" id="cxg-${k}">${esc(lbl)}</p>${l.map((c) => opt(c, "")).join("")}</div>`;
+  }
+  list.innerHTML = html || `<p class="cx-none">Aucune teinte pour « ${esc(q.trim())} »</p>`;
+  cx.pop.items = [...list.querySelectorAll('.cx-opt[aria-disabled="false"]')];
+  cxPopActive(cx.pop.items.length ? 0 : -1);
+}
+function cxPopActive(k) {
+  const it = cx.pop.items, q = $("cxQ");
+  it[cx.pop.active]?.setAttribute("aria-selected", "false");
+  it[cx.pop.active]?.classList.remove("cx-on");
+  cx.pop.active = k;
+  const el = it[k];
+  if (!el) { q?.removeAttribute("aria-activedescendant"); return; }
+  el.setAttribute("aria-selected", "true");
+  el.classList.add("cx-on");
+  q?.setAttribute("aria-activedescendant", el.id);
+  el.scrollIntoView({ block: "nearest" });
+}
+function cxPopPick(i) {
+  if (!cxAdd(i)) return;
+  cxPopClose(false);
+  ($("cxAdd") ?? cxPanel().querySelector(`.cx-fin-b[data-i="${i}"]`))?.focus({ preventScroll: true });
+}
+
+/* --- Câblage --- */
 function buildCompare() {
-  const A = $("cmpA"), B = $("cmpB"), st = $("cmpStage"), h = $("handle");
-  if (!A || !B || !st) return null;
-  const pick = (sel) => COLORS[+sel.value] ?? COLORS[0];
-  const labels = [[document.querySelector(".cmp-label.a"), A], [document.querySelector(".cmp-label.b"), B]];
-  const upd = () => {
-    const a = pick(A), b = pick(B);
-    cmpShow($("cmpImgA"), a); cmpShow($("cmpImgB"), b);
-    const la = $("cmpLabA"), lb = $("cmpLabB");
-    if (la) la.textContent = `${a.name} · ${a.code}`;
-    if (lb) lb.textContent = `${b.name} · ${b.code}`;
-    $("cmpDotA")?.style.setProperty("--c", a.hex); $("cmpDotB")?.style.setProperty("--c", b.hex);
-    labels.forEach(([l, sel]) => l?.setAttribute("aria-label", `Afficher en grand : ${pick(sel).name}`));
-    if (isOpen("cmpPanel")) writeHash(`#cmp=${a.code},${b.code}`);
-  };
-  A.onchange = B.onchange = upd;
-  const swap = $("cmpSwap");
-  if (swap) swap.onclick = () => { const v = A.value; A.value = B.value; B.value = v; upd(); };
-  // Toucher une étiquette : cette teinte devient la teinte affichée, le panneau se ferme
-  labels.forEach(([l, sel]) => {
-    if (!l) return;
-    if (l.tagName !== "BUTTON") { l.setAttribute("role", "button"); l.tabIndex = 0; }
-    l.title = "Afficher en grand";
-    const show = () => {
-      const i = +sel.value;
-      closePanels();
-      if (i === dest()) centreFan(i);
-      else goTo(i, D.paint);
-    };
-    l.addEventListener("click", show);
-    l.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); show(); } });
+  const panel = cxPanel(), v = cxView(), strip = $("cxStrip");
+  if (!panel || !v || !strip) return null;
+  panel.querySelectorAll("[data-m]").forEach((b) => b.addEventListener("click", () => cxMode(b.dataset.m)));
+  panel.querySelectorAll("[data-s]").forEach((b) => b.addEventListener("click", () => cxStudio(b.dataset.s)));
+  $("cxLoupe")?.addEventListener("click", () => cxLoupeToggle());
+
+  // Bande des finalistes : retirer, ajouter, rideau (choix de la paire), glisser pour réordonner
+  strip.addEventListener("click", (e) => {
+    if (strip._dragged) { strip._dragged = false; return; }
+    const x = e.target.closest("[data-x]");
+    if (x && !x.disabled) {
+      const i = +x.dataset.x, k = cx.list.indexOf(i);
+      if (cxRemove(i)) {
+        const xs = [...strip.querySelectorAll(".cx-x:not(:disabled)")];
+        (xs[Math.min(k, xs.length - 1)] ?? $("cxAdd") ?? strip.querySelector(".cx-fin-b"))?.focus({ preventScroll: true });
+      }
+      return;
+    }
+    if (e.target.closest("#cxAdd")) { cx.pop.open ? cxPopClose() : cxPopOpen(); return; }
+    const b = e.target.closest(".cx-fin-b");
+    if (b && cx.mode === "rideau") cxPairPick(+b.dataset.i);
   });
-  const set = (pct) => {
-    pct = clamp(pct, 0, 100);
-    st.style.setProperty("--split", pct + "%");
-    h?.setAttribute("aria-valuenow", String(Math.round(pct)));
-  };
-  let on = null, box = null;
-  const posX = (e) => ((e.clientX - box.left) / (box.width || 1)) * 100;
-  st.addEventListener("pointerdown", (e) => {
-    if (e.button > 0 || on != null || e.target.closest(".cmp-label, button, select")) return;
-    box = st.getBoundingClientRect();
-    on = e.pointerId; try { st.setPointerCapture(e.pointerId); } catch {}
-    set(posX(e));
+  strip.addEventListener("keydown", (e) => {
+    const b = e.target.closest(".cx-fin-b");
+    if (!b || !e.altKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+    e.preventDefault(); e.stopPropagation();
+    const i = +b.dataset.i;
+    if (cxMove(i, e.key === "ArrowLeft" ? -1 : 1)) strip.querySelector(`.cx-fin-b[data-i="${i}"]`)?.focus({ preventScroll: true });
   });
-  st.addEventListener("pointermove", (e) => { if (e.pointerId === on) set(posX(e)); });
-  const off = (e) => { if (e.pointerId === on) on = null; };
-  st.addEventListener("pointerup", off);
-  st.addEventListener("pointercancel", off);
-  st.addEventListener("lostpointercapture", off);
-  h?.addEventListener("keydown", (e) => {
-    const v = +h.getAttribute("aria-valuenow");
-    const n = { ArrowLeft: v - 5, ArrowDown: v - 5, ArrowRight: v + 5, ArrowUp: v + 5, PageDown: v - 20, PageUp: v + 20, Home: 0, End: 100 }[e.key];
-    if (n == null) return;
-    e.preventDefault(); e.stopPropagation(); set(n);
+  wireStripDrag(strip);
+
+  // Vue : rideau (glisser / toucher), duel (choisir / balayer), loupe (Maj, appui long, bouton)
+  v.addEventListener("click", (e) => {
+    if (v._skipClick) { v._skipClick = false; return; }
+    const pc = e.target.closest("[data-p]");
+    if (pc) return cxPairPick(+pc.dataset.p);
+    if (e.target.closest("#cxShow")) return cxShowWinner();
+    if (e.target.closest("#cxAgain")) { cx.duel = null; cxRender(); cxView()?.querySelector(".cx-cell")?.focus({ preventScroll: true }); return; }
+    if (e.target.closest("#cxShare")) return void cxShare();
+    const cell = e.target.closest(".cx-cell[data-side]");
+    if (cell && cx.mode === "duel") cxPick(cell.dataset.side);
   });
+  v.addEventListener("keydown", (e) => {
+    const cell = e.target.closest?.(".cx-cell[data-side]");
+    if (cell && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); e.stopPropagation(); cxPick(cell.dataset.side); }
+  });
+  wireViewPointer(v);
+  v.addEventListener("scroll", () => { if (cx.loupe.lens.length) cxLoupeRects(); }, { passive: true });
+
+  // Sélecteur
+  const q = $("cxQ"), list = $("cxList");
+  q?.addEventListener("input", () => cxPopFill(q.value));
+  q?.addEventListener("keydown", (e) => {
+    const n = cx.pop.items.length;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (n) cxPopActive((cx.pop.active + (e.key === "ArrowDown" ? 1 : -1) + n) % n);
+    } else if (e.key === "Home" && e.ctrlKey) { e.preventDefault(); if (n) cxPopActive(0); }
+    else if (e.key === "End" && e.ctrlKey) { e.preventDefault(); if (n) cxPopActive(n - 1); }
+    else if (e.key === "PageDown" || e.key === "PageUp") { e.preventDefault(); if (n) cxPopActive(clamp(cx.pop.active + (e.key === "PageDown" ? 8 : -8), 0, n - 1)); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      const el = cx.pop.items[cx.pop.active];
+      if (el) cxPopPick(+el.dataset.i);
+    } else if (e.key === "Tab") cxPopClose(false);
+  });
+  list?.addEventListener("pointerdown", (e) => e.preventDefault());              // le champ garde le focus
+  list?.addEventListener("click", (e) => {
+    const o = e.target.closest('.cx-opt[aria-disabled="false"]');
+    if (o) cxPopPick(+o.dataset.i);
+  });
+  list?.addEventListener("pointermove", (e) => {
+    const o = e.target.closest('.cx-opt[aria-disabled="false"]');
+    if (o && e.pointerType === "mouse") { const k = cx.pop.items.indexOf(o); if (k !== cx.pop.active) cxPopActive(k); }
+  });
+  panel.addEventListener("pointerdown", (e) => {
+    if (cx.pop.open && !e.target.closest("#cxPop, #cxAdd")) cxPopClose(false);
+  });
+
+  // Clavier du panneau : 1/2/3 modes, S décor, L loupe, ←/→ rideau ou duel, Maj loupe ; Tab reste dans le panneau
+  panel.addEventListener("keydown", (e) => {
+    if (e.key === "Tab") return trapTab(e, panel);
+    if (e.key === "Shift" && !e.repeat && cxLoupeOk() && !e.target.closest("input")) { cx.loupe.shift = true; cxLoupeUpdate(); return; }
+    if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest("input, #cxPop")) return;
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (!e.repeat && (key === "1" || key === "2" || key === "3")) { e.preventDefault(); cxMode(CX_MODES[+key - 1]); }
+    else if (!e.repeat && key === "s") { e.preventDefault(); cxStudio(CX_STUDIOS[(CX_STUDIOS.indexOf(cx.studio) + 1) % CX_STUDIOS.length]); }
+    else if (!e.repeat && key === "l") { e.preventDefault(); cxLoupeToggle(); }
+    else if (key === "ArrowLeft" || key === "ArrowRight" || key === "ArrowUp" || key === "ArrowDown" || key === "Home" || key === "End") {
+      if (cx.mode === "rideau") {
+        if (e.target.closest(".cx-pair, .cx-strip") && !e.target.closest("#cxHandle")) return;
+        e.preventDefault();
+        const step = e.shiftKey ? 1 : 5, back = key === "ArrowLeft" || key === "ArrowUp";
+        if (key === "Home" || key === "End") cxSplitTo(key === "Home" ? 0 : 100);
+        else cxSplit(cx.split + (back ? -step : step));
+      } else if (cx.mode === "duel" && cx.duel?.winner == null && !e.repeat) {
+        if (e.target.closest(".cx-strip")) return;
+        const vert = phonePortrait.matches;
+        const side = key === "ArrowLeft" || (vert && key === "ArrowUp") ? "left" : key === "ArrowRight" || (vert && key === "ArrowDown") ? "right" : null;
+        if (side) { e.preventDefault(); cxPick(side); }
+      }
+    }
+  });
+  panel.addEventListener("keyup", (e) => { if (e.key === "Shift" && cx.loupe.shift) { cx.loupe.shift = false; cxLoupeUpdate(); } });
+  addEventListener("blur", () => { if (cx.loupe.shift || cx.loupe.touch) { cx.loupe.shift = cx.loupe.touch = false; cxLoupeUpdate(); } });
+  const relayout = () => { if (isOpen("cmpPanel")) cxRender(); };
+  phonePortrait.addEventListener?.("change", relayout);
+  phoneLand.addEventListener?.("change", relayout);
+
   return {
-    open(a, b) {
-      const html = cmpOptions();
-      A.innerHTML = html; B.innerHTML = html;
-      A.value = String(a); B.value = String(b);
-      set(50); upd();
+    open(list, mode, studio) {
+      cx.list = cxNormalise(list);
+      cx.mode = CX_MODES.includes(mode) ? mode : cx.list.length >= 3 || phonePortrait.matches ? "cote" : "rideau";
+      cx.studioSet = CX_STUDIOS.includes(studio);
+      cx.studio = cx.studioSet ? studio : defaultStudio(cx.mode);
+      cx.pair = cx.list.slice(0, 2); cx.split = 50; cx.duel = null;
+      cx.loupe.toggled = false;
+      cxPopClose(false);
+      cxRender();
     },
-    refresh: upd,
+    refresh() { if (cx.loupe.lens.length) cxLoupeOff(); cxLayout(); },
+    close() { cx.gen++; cxPopClose(false); cx.loupe.toggled = false; cxLoupeOff(true); cx.splitRun++; },
+    popClose: () => cxPopClose(),
   };
 }
+function cxMode(m) {
+  if (!CX_MODES.includes(m) || m === cx.mode && !(m === "duel" && cx.duel?.winner != null)) return;
+  cx.mode = m;
+  if (!cx.studioSet) cx.studio = defaultStudio(m);
+  if (m === "duel") cx.duel = null;
+  cxPopClose(false);
+  cxRender();
+  cxSay(`Mode ${CX_MODE_L[m]}`);
+}
+function cxStudio(s) {
+  if (!CX_STUDIOS.includes(s)) return;
+  cx.studioSet = true;
+  if (s === cx.studio) return;
+  cx.studio = s;
+  const panel = cxPanel();
+  panel.dataset.studio = s;
+  panel.querySelectorAll("[data-s]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.s === s)));
+  const cap = $("cxCap"); if (cap) cap.hidden = s === "studio";
+  const had = cx.loupe.lens.length > 0;
+  if (had) { cx.loupe.lens.forEach((x) => x.el.remove()); cx.loupe.lens = []; }
+  cxLayout();
+  if (had) cxLoupeUpdate();
+  cxHash();
+  cxSay(`Décor ${CX_STUDIO_L[s]}`);
+}
+function cxLoupeToggle() {
+  if (!cxLoupeOk()) return;
+  cx.loupe.toggled = !cx.loupe.toggled;
+  cxLoupeUpdate();
+  cxSay(cx.loupe.toggled ? "Loupe activée" : "Loupe désactivée");
+}
+function cxPairPick(i) {
+  if (!cx.list.includes(i)) return;
+  if (cx.pair.includes(i)) {
+    if (cx.list.length === 2) [cx.pair[0], cx.pair[1]] = [cx.pair[1], cx.pair[0]];   // deux teintes : inverser
+    else return;
+  } else cx.pair = [cx.pair[1], i];                       // la plus ancienne de la paire laisse sa place
+  cx.pair.sort((a, b) => cx.list.indexOf(a) - cx.list.indexOf(b));
+  const had = document.activeElement?.dataset?.p != null;
+  cxRender();
+  if (had) cxView()?.querySelector(`[data-p="${i}"]`)?.focus({ preventScroll: true });
+  cxSay(`Rideau : ${COLORS[cx.pair[0]].name} et ${COLORS[cx.pair[1]].name}`);
+}
+function trapTab(e, panel) {
+  const els = [...panel.querySelectorAll('button, input, [tabindex="0"], [role="slider"]')]
+    .filter((el) => !el.disabled && el.offsetParent !== null && !el.closest("[hidden]") && el.tabIndex >= 0);
+  if (!els.length) return;
+  const k = els.indexOf(document.activeElement);
+  const to = e.shiftKey ? (k <= 0 ? els[els.length - 1] : null) : (k === els.length - 1 || k < 0 ? els[0] : null);
+  if (to) { e.preventDefault(); to.focus({ preventScroll: true }); }
+}
+
+// Glisser une carte de finaliste (souris : tout de suite ; toucher : après un appui de 280 ms)
+function wireStripDrag(strip) {
+  let d = null;
+  const end = (commit) => {
+    if (!d) return;
+    const { li, items, from, to, timer } = d;
+    clearTimeout(timer);
+    if (d.on) {
+      items.forEach((x) => { x.style.translate = ""; x.classList.remove("drag", "shift"); });
+      strip.classList.remove("dragging");
+      strip._dragged = true;
+      setTimeout(() => (strip._dragged = false), 0);
+      if (commit && to !== from) {
+        const i = +li.dataset.i;
+        cx.list.splice(from, 1); cx.list.splice(to, 0, i);
+        cxChanged(`${COLORS[i].name} en position ${to + 1} sur ${cx.list.length}`);
+        strip.querySelector(`.cx-fin-b[data-i="${i}"]`)?.focus({ preventScroll: true });
+      }
+    }
+    d = null;
+  };
+  strip.addEventListener("pointerdown", (e) => {
+    const b = e.target.closest(".cx-fin-b");
+    if (!b || e.button > 0 || d) return;
+    const li = b.closest(".cx-fin"), items = [...strip.querySelectorAll(".cx-fin")];
+    d = { id: e.pointerId, li, items, x0: e.clientX, y0: e.clientY, from: items.indexOf(li), to: items.indexOf(li), on: false,
+      rects: items.map((x) => x.getBoundingClientRect()), touch: e.pointerType !== "mouse", timer: 0 };
+    if (d.touch) d.timer = setTimeout(() => { if (d && !d.on) start(); }, 280);
+  });
+  const start = () => {
+    d.on = true;
+    try { d.li.setPointerCapture(d.id); } catch {}
+    d.li.classList.add("drag");
+    strip.classList.add("dragging");
+    if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.(6);
+  };
+  strip.addEventListener("pointermove", (e) => {
+    if (!d || e.pointerId !== d.id) return;
+    const dx = e.clientX - d.x0, dy = e.clientY - d.y0;
+    if (!d.on) {
+      if (d.touch) { if (Math.hypot(dx, dy) > 8) end(false); return; }
+      if (Math.abs(dx) < 6) return;
+      start();
+    }
+    d.li.style.translate = `${Math.round(dx)}px 0`;
+    const r0 = d.rects[d.from], mid = r0.left + r0.width / 2 + dx;
+    let to = 0;
+    d.rects.forEach((r, k) => { if (k !== d.from && mid > r.left + r.width / 2) to++; });
+    d.to = to;
+    const w = Math.round(r0.width + 12);
+    d.items.forEach((x, k) => {
+      if (k === d.from) return;
+      const s = k > d.from && k <= to ? -w : k < d.from && k >= to ? w : 0;
+      x.style.translate = s ? `${s}px 0` : "";
+      x.classList.toggle("shift", !!s);
+    });
+  });
+  strip.addEventListener("pointerup", (e) => { if (d && e.pointerId === d.id) end(true); });
+  strip.addEventListener("pointercancel", (e) => { if (d && e.pointerId === d.id) end(false); });
+  strip.addEventListener("touchmove", (e) => { if (d?.on && e.cancelable) e.preventDefault(); }, { passive: false });
+}
+
+// Pointeur sur la vue : rideau (glisser, ou toucher = saut amorti), duel (balayer = écarter), loupe (appui long)
+function wireViewPointer(v) {
+  let p = null;
+  v.addEventListener("pointerdown", (e) => {
+    if (e.button > 0 || p) return;
+    if (e.target.closest("button, .cx-pair, .cx-rlab")) return;
+    if (cx.mode === "rideau" && e.target.closest("#cxRideau")) {
+      const box = $("cxRideau").getBoundingClientRect();
+      const pos = (ev) => (cx.vert ? (ev.clientY - box.top) / (box.height || 1) : (ev.clientX - box.left) / (box.width || 1)) * 100;
+      const near = Math.abs((cx.vert ? e.clientY - box.top : e.clientX - box.left) - cx.splitPx) < 28;
+      p = { kind: "rideau", id: e.pointerId, pos, x0: e.clientX, y0: e.clientY, on: near };
+      try { v.setPointerCapture(e.pointerId); } catch {}
+      if (near) { cx.splitRun++; cxSplit(pos(e)); }
+      return;
+    }
+    const car = e.target.closest(".cx-cell .cx-car, .cx-cell");
+    if (!car) return;
+    p = { kind: "cell", id: e.pointerId, cell: e.target.closest(".cx-cell"), x0: e.clientX, y0: e.clientY, touch: e.pointerType !== "mouse", t: 0, lp: false };
+    if (p.touch && cxLoupeOk() && !cx.loupe.toggled) {
+      p.t = setTimeout(() => {
+        if (!p || p.kind !== "cell") return;
+        p.lp = true;
+        cx.loupe.touch = true; cx.loupe.x = p.x0; cx.loupe.y = p.y0;
+        cxLoupeUpdate();
+        if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.(8);
+      }, 380);
+    }
+  });
+  v.addEventListener("pointermove", (e) => {
+    if (e.pointerType === "mouse" || cx.loupe.touch || cx.loupe.toggled) { cx.loupe.x = e.clientX; cx.loupe.y = e.clientY; }
+    if (cx.loupe.lens.length) cxLoupeMove(cx.loupe.x, cx.loupe.y);
+    if (!p || e.pointerId !== p.id) return;
+    const dx = e.clientX - p.x0, dy = e.clientY - p.y0;
+    if (p.kind === "rideau") {
+      if (!p.on && Math.hypot(dx, dy) > 6) { p.on = true; cx.splitRun++; }
+      if (p.on) cxSplit(p.pos(e));
+    } else if (!p.lp && Math.hypot(dx, dy) > 8) { clearTimeout(p.t); p.t = 0; }
+  });
+  const up = (e, cancel) => {
+    if (!p || e.pointerId !== p.id) return;
+    const q = p; p = null;
+    if (q.kind === "rideau") {
+      if (!q.on && !cancel) cxSplitTo(q.pos(e));
+      v._skipClick = true; setTimeout(() => (v._skipClick = false), 0);
+      return;
+    }
+    clearTimeout(q.t);
+    if (q.lp) {
+      v._skipClick = true; setTimeout(() => (v._skipClick = false), 0);
+      cx.loupe.touch = false; cxLoupeUpdate();
+      return;
+    }
+    const dx = e.clientX - q.x0, dy = e.clientY - q.y0;
+    // Balayer une teinte = l'écarter : l'autre gagne
+    if (!cancel && cx.mode === "duel" && q.touch && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && q.cell?.dataset.side) {
+      v._skipClick = true; setTimeout(() => (v._skipClick = false), 0);
+      cxPick(q.cell.dataset.side === "left" ? "right" : "left");
+    }
+  };
+  v.addEventListener("pointerup", (e) => up(e, false));
+  v.addEventListener("pointercancel", (e) => up(e, true));
+  v.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse" && cx.loupe.lens.length) cx.loupe.lens.forEach((ln) => ln.el.classList.remove("on")); });
+  v.addEventListener("touchmove", (e) => { if ((cx.loupe.touch || p?.kind === "rideau") && e.cancelable) e.preventDefault(); }, { passive: false });
+}
+
 let cmp = null;
-function openCompare(a = dest(), b = null, opener = $("btnCompare")) {
+function openCompare(list = defaultFinalists(), { mode = null, studio = null, opener = $("btnCompare") } = {}) {
   if (!cmp || !started) return;
-  if (b == null || b === a) b = defaultB(a);
-  openPanel("cmpPanel", opener);
-  cmp.open(a, b);
+  openPanel("cmpPanel", opener, () => fine.matches ? cxPanel().querySelector('[data-m][aria-pressed="true"]') : $("closeCmp"));
+  cmp.open(list, mode, studio);
 }
 
 /* ---------- Panneaux et menu ---------- */
@@ -1970,6 +2808,7 @@ function openPanel(id, opener = document.activeElement, pickFocus = null) {
 }
 function closePanels() {
   const any = anyPanel(), wasCmp = isOpen("cmpPanel");
+  if (wasCmp) cmp?.close();
   document.querySelectorAll(".panel.open").forEach((x) => x.classList.remove("open"));
   closeMenu(false);
   if (!any) return;
@@ -2107,10 +2946,20 @@ function parseHash(h = location.hash) {
   s = s.trim();
   if (!s) return null;
   const find = (x) => codeIndex.get(x.trim().toUpperCase());
-  const m = /^(cmp|sel)=(.*)$/i.exec(s);
+  const m = /^(cmp|sel)=([^&?]*)(.*)$/i.exec(s);
   if (m) {
-    const list = [...new Set(m[2].split(/[.,;\s]+/).map(find).filter((i) => i != null))];
-    return list.length ? { type: m[1].toLowerCase(), list } : null;
+    const type = m[1].toLowerCase();
+    let list = [...new Set(m[2].split(/[.,;\s]+/).map(find).filter((i) => i != null))];
+    if (!list.length) return null;
+    if (type === "cmp") list = list.slice(0, 4);
+    // Options du face à face, lues avec indulgence : &m=duel|rideau|cote, &s=gris|jour|nuit|studio
+    let mode = null, studio = null;
+    for (const kv of m[3].split(/[&?;]+/)) {
+      const [k = "", v = ""] = kv.split("=").map((x) => norm(x.trim()));
+      if (/^(m|mode)$/.test(k)) mode = /^du/.test(v) ? "duel" : /^ri|^cu/.test(v) ? "rideau" : /^co|^si|^cote/.test(v) ? "cote" : null;
+      else if (/^(s|studio|decor|fond)$/.test(k)) studio = /^gr|^ne/.test(v) ? "gris" : /^jo|^pl|^da/.test(v) ? "jour" : /^nu|^ni/.test(v) ? "nuit" : /^st|^or/.test(v) ? "studio" : null;
+    }
+    return { type, list, mode, studio };
   }
   const i = find(s);
   return i != null ? { type: "code", i } : null;
@@ -2123,7 +2972,7 @@ function onHashChange() {
     if (anyPanel()) closePanels();
     if (r.i === dest()) { centreFan(r.i); return; }
     goTo(r.i, D.paint);
-  } else if (r.type === "cmp") openCompare(r.list[0], r.list[1] ?? null);
+  } else if (r.type === "cmp") openCompare(r.list, { mode: r.mode, studio: r.studio });
   else if (r.type === "sel") { writeHash("#" + COLORS[idx].code); offerSelection(r.list); }
 }
 
@@ -2131,6 +2980,7 @@ function onHashChange() {
 
 // Échap en cascade : panneaux (Nuancier, face à face) → menus → rotation en cours (retour à la teinte affichée)
 function onEscape(e) {
+  if (isOpen("cmpPanel") && cmp?.popClose()) { e.preventDefault(); return; }
   if (anyPanel()) { e.preventDefault(); closePanels(); return; }
   if (closeLpMenu(true)) { e.preventDefault(); return; }
   if (menuOpen()) { e.preventDefault(); closeMenu(false); $("btnExport")?.focus({ preventScroll: true }); return; }
@@ -2195,6 +3045,7 @@ function wire() {
   on("btnCompare", () => openCompare());
   on("closeCmp", closePanels);
   on("shareSel", shareSelection);
+  on("cmpSel", () => openCompare(favFinalists(), { opener: $("cmpSel") }));
   on("specCode", async () => {
     const code = COLORS[idx].code;
     toast((await copyText(code)) ? `Code ${code} copié` : "Copie impossible");
@@ -2251,7 +3102,7 @@ async function start(data) {
   const r = parseHash();
   let initCmp = null, initSel = null;
   if (r?.type === "code") idx = r.i;
-  else if (r?.type === "cmp") { idx = r.list[0]; initCmp = r.list; }
+  else if (r?.type === "cmp") { idx = r.list[0]; initCmp = r; }
   else if (r?.type === "sel") { idx = r.list[0]; initSel = r.list; }
   else idx = codeIndex.get("5ZA") ?? 0;
 
@@ -2301,7 +3152,7 @@ async function start(data) {
   body.classList.add("ready", "intro");
   setTimeout(() => body.classList.remove("intro"), reduced.matches ? 400 : 1400);
 
-  if (initCmp) openCompare(initCmp[0], initCmp[1] ?? null);
+  if (initCmp) openCompare(initCmp.list, { mode: initCmp.mode, studio: initCmp.studio });
   if (initSel) offerSelection(initSel);
 }
 
