@@ -12,7 +12,7 @@ Puis http://localhost:8850 (un lien direct vers une teinte : `#5ZA`).
 
 ## Netteté
 
-- Rendus WebP 1200 / 2000 / 3500 px, choisis pour avoir au moins 1 pixel d'image par pixel d'écran (Retina compris).
+- Rendus WebP 1200 / 2000 / 3500 px générés à partir d'une seule photo studio : agrandie ×4 par super-résolution (Real-ESRGAN x4plus), carrosserie isolée puis repeinte dans chacune des 152 teintes (ombres et reflets conservés), tramage anti-bandes, voiture posée au même endroit sur une toile 3500 × 5000. Choisis pour avoir au moins 1 pixel d'image par pixel d'écran (Retina compris).
 - Le zoom de la voiture vient de la taille de la scène, pas d'un `transform: scale` : ni l'image ni le titre ne sont rééchantillonnés.
 - Titre, parallaxe, étiquettes de l'arc, carte d'aperçu, cadre et filets positionnés au pixel entier, jamais tournés. Aucun `backdrop-filter`, aucun flou.
 
@@ -50,7 +50,7 @@ Liens directs : `#5ZA` (teinte), `#cmp=5ZA,M4T[,3RR,GB0]&m=duel|rideau|cote&s=gr
 - `img/thumb/CODE.webp` — vignettes 640×256 (nuancier et carte d'aperçu)
 - `img/1200`, `img/2000`, `img/3500` — rendus + `_mask.webp` (silhouette pour faire passer le nom derrière la voiture) + `_car.webp` (voiture seule : carrosserie, roues, ombre de contact — décors du face à face)
 
-Les rendus et noms de teintes appartiennent à Porsche : prototype d'étude, à garder en local.
+Les noms et codes de teintes viennent du programme Paint to Sample de Porsche : prototype d'étude.
 
 ## Logo
 

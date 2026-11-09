@@ -56,8 +56,8 @@
   /* L'Éventail (lu par app.js) : bande visible, pointe au repos, sortie de la lame choisie,
      rayon = max(--fan-r × largeur, --fan-rmin) */
   --fan-h: 150px;
-  --fan-tip: 52px;
-  --fan-out: 26px;
+  --fan-tip: 56px;
+  --fan-out: 30px;          /* la lame choisie sort nettement : c'est elle, la teinte affichée */
   --fan-hover: 8px;
   --fan-lh: 14px;
   --fan-r: 1.05;
@@ -69,18 +69,18 @@
 
   --z: 1.38;                /* zoom du rendu (dimensionné, sans transform) */
 }
-@media (min-width: 1200px) { :root { --fan-h: 190px; --fan-tip: 52px; --fan-out: 28px; --lift: 64px; } }
+@media (min-width: 1200px) { :root { --fan-h: 190px; --fan-tip: 58px; --fan-out: 32px; --lift: 64px; } }
 @media (min-width: 1440px) { :root { --gutter: 48px; } }
 @media (max-width: 1100px) { :root { --z: 1.22; --gutter: 36px; } }
 @media (max-aspect-ratio: 1/1) { :root { --z: .96; } }
 @media (max-width: 640px) {
   :root { --gutter: 24px; --btn: 44px; --fi: 12px; --name-size: 38px;
     --pad-t: max(16px, env(safe-area-inset-top, 0px)); --pad-b: max(16px, env(safe-area-inset-bottom, 0px));
-    --fan-h: 120px; --fan-tip: 46px; --fan-out: 20px; --fan-hover: 6px; --fan-r: 1.6; --fan-rmin: 0px; }
+    --fan-h: 150px; --fan-tip: 54px; --fan-out: 24px; --fan-hover: 6px; --fan-r: 1.6; --fan-rmin: 0px; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
   :root { --pad-t: max(12px, env(safe-area-inset-top, 0px)); --pad-b: max(12px, env(safe-area-inset-bottom, 0px));
-    --z: 1.10; --fan-h: 84px; --fan-tip: 34px; --fan-out: 14px; --fan-hover: 6px; --fan-r: 1.05; --fan-rmin: 0px;
+    --z: 1.10; --fan-h: 84px; --fan-tip: 37px; --fan-out: 16px; --fan-hover: 6px; --fan-r: 1.05; --fan-rmin: 0px;
     --fi: 8px; --gutter: 24px; --name-size: 26px; }
 }
 @media (pointer: coarse) { :root { --btn: 44px; } }
@@ -137,9 +137,12 @@ svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColo
 .btn:disabled { opacity: .4; }
 
 /* ---------- Scène ---------- */
-/* Pas de transition sur le fond : --bg est le coin échantillonné du rendu, le rendu s'y fond sans couture. */
+/* Pas de transition sur le fond. La rig couvre l'écran dès que le rendu le permet (app.js) ; ailleurs (portrait,
+   sous la voiture remontée) le fond prolonge le rendu : --bg (son coin haut) au-dessus de la rig, --bg-floor (son
+   sol, échantillonné sur ses dernières lignes) en dessous — de --bg-y0 à --bg-y1, les bords de la rig à l'écran. */
 .stage { position: fixed; inset: 0; overflow: hidden; touch-action: pan-y; cursor: grab; user-select: none;
-  -webkit-user-select: none; background: var(--bg, var(--ink)); }
+  -webkit-user-select: none; background-color: var(--bg, var(--ink));
+  background-image: linear-gradient(180deg, var(--bg, var(--ink)) var(--bg-y0, 0px), var(--bg-floor, var(--bg, var(--ink))) var(--bg-y1, 100%)); }
 .stage.dragging { cursor: grabbing; }
 .stage::after { content: ""; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(180deg, rgb(10 10 11 / var(--scrim-t, .45)) 0, rgb(10 10 11 / calc(var(--scrim-t, .45) * .7)) 64px,
@@ -156,7 +159,7 @@ svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColo
 /* Volet directionnel : app.js translate .wipe d'un côté et #shotCur de l'autre (le rendu reste immobile à l'écran). */
 .wipe { position: absolute; inset: 0; overflow: hidden; }
 .titles { position: absolute; inset: 0; pointer-events: none;
-  -webkit-mask: url("img/3500/_mask.webp") center / cover no-repeat; mask: url("img/3500/_mask.webp") center / cover no-repeat; }
+  -webkit-mask: url("img/3500/_mask.webp?v=c7") center / cover no-repeat; mask: url("img/3500/_mask.webp?v=c7") center / cover no-repeat; }
 /* --ty = bas du titre (px depuis le haut de la rig) ; --tx = décalage du geste (px entiers). */
 .title { position: absolute; left: 0; right: 0; margin-inline: auto; width: fit-content;
   top: auto; bottom: calc(100% - var(--ty, 40%));
@@ -167,7 +170,7 @@ svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColo
 #stage.moving .wipe, #stage.moving #shotCur, #stage.moving #shotNext, #stage.moving .titles { will-change: translate, opacity; }
 
 /* Rendu indisponible : aplat de la teinte dans le volet (il suit le geste), message centré */
-.stage.noimg { background: var(--paint); }
+.stage.noimg { background: var(--paint); }   /* (remplace aussi le dégradé) */
 .stage.noimg .wipe { background: var(--paint); }
 .stage.noimg #shotCur { visibility: hidden; }
 .stage.noimg:not(.moving) .wipe + .titles { opacity: 0; }
@@ -219,19 +222,17 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 
 /* ---------- Bandeau haut, dans le cadre : marque · intitulé · outils ---------- */
 .top { position: fixed; z-index: 20; top: calc(var(--fi) + 1px); left: calc(var(--fi) + 1px); right: calc(var(--fi) + 1px);
-  display: flex; align-items: center; gap: 16px; height: 56px; border-bottom: 1px solid var(--frame-c);
+  display: flex; align-items: center; gap: 16px; height: 57px; border-bottom: 1px solid var(--frame-c);   /* 56 px + filet : outils au px entier */
   padding: 0 calc(var(--gutter) - var(--fi) - 1px); }
 .mark { margin-right: auto; display: flex; align-items: center; min-width: 0; }
 /* Logo : ligne de toit de la 911 en coup de pinceau + logotype Poppins vectorisé (logo/) */
 .mark .logo { display: block; width: 120px; height: 40px; fill: currentColor; }
 .band { position: absolute; left: 50%; top: 20px; width: 320px; margin-left: -160px; text-align: center;
   color: var(--text); letter-spacing: .24em; white-space: nowrap; pointer-events: none; }
-.tools { display: flex; align-items: center; }
+.tools { display: flex; align-items: center; gap: 0; }   /* 2 × 12 px de remplissage = 24 px entre deux outils, sans séparateur */
 .tool { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px;
   font: 400 14px/16px var(--f-ui); letter-spacing: .02em; color: var(--text); white-space: nowrap;
   transition: color var(--d-micro) var(--e-out); }
-.tool + .tool::before { content: "·"; position: absolute; left: -3px; top: 12px; width: 6px; text-align: center;
-  color: var(--text); pointer-events: none; }
 .tool svg { width: 16px; height: 16px; }
 .tool kbd { font: 400 12px/16px var(--f-mono); color: var(--text); min-width: 12px; text-align: center; }
 .tool .tn { font: 400 12px/16px var(--f-mono); color: var(--text); font-variant-numeric: tabular-nums; }
@@ -248,7 +249,9 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   padding: 0 var(--pad-r) 0 var(--pad-l); pointer-events: none; }
 .dock-row { position: relative; display: flex; align-items: flex-end; gap: 32px; }
 .dock-row > * { pointer-events: auto; }
-.spec { flex: none; width: min(46vw, 680px); min-width: 0; margin-right: auto; display: flex; flex-direction: column; }
+/* Largeur bornée : la perle (au bout du filet) reste nettement à gauche de l'index de l'éventail (≥ 120 px de l'axe) */
+.spec { flex: none; width: min(520px, max(300px, 50vw - var(--pad-l) - 120px)); min-width: 0; margin-right: auto; display: flex; flex-direction: column; }
+@supports (width: round(down, 1.5px, 1px)) { .spec { width: round(down, min(520px, max(300px, 50vw - var(--pad-l) - 120px)), 1px); } }
 /* Ombre portée de l'étiquette : un dégradé (pas de flou) qui garde le texte lisible sur une carrosserie claire */
 .spec { position: relative; isolation: isolate; }
 .spec::before { content: ""; position: absolute; z-index: -1; inset: -56px -96px -32px -72px; pointer-events: none;
@@ -332,14 +335,14 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 .menu.open { opacity: 1; visibility: visible; translate: none;
   transition: opacity var(--d-ui) var(--e-out), translate var(--d-ui) var(--e-out), visibility 0s; }
 #menu::before { content: "Exporter"; font: 400 12px/16px var(--f-mono); letter-spacing: .14em; text-transform: uppercase;
-  color: var(--faint); padding: 8px 12px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 .menu button { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 40px; padding: 0 12px;
-  text-align: left; font-size: 13px; font-weight: 500; transition: background-color var(--d-micro) var(--e-out); }
-#menu button:last-child { border-top: 1px solid var(--line); margin-top: 4px; }
+  text-align: left; font-size: 13px; line-height: 16px; font-weight: 500; transition: background-color var(--d-micro) var(--e-out); }
+#menu button:last-child { box-shadow: inset 0 1px 0 var(--line); margin-top: 4px; }   /* filet dessiné : hauteur paire, texte au px entier */
 .menu button:hover { background: var(--ink-3); }
 .menu button:disabled { opacity: .4; cursor: progress; background: none; }
 .menu button:focus-visible { outline-offset: -2px; }
-.menu small { color: var(--muted); font: 400 12px/1 var(--f-mono); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.menu small { color: var(--muted); font: 400 12px/16px var(--f-mono); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
 
 /* Menu d'une lame (appui long) */
 .lp-menu { position: fixed; z-index: 60; right: auto; bottom: auto; min-width: 220px; }
@@ -359,30 +362,48 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 @media (pointer: fine) { .fan { cursor: grab; } .fan.grabbing, .fan.grabbing .blade { cursor: grabbing; } }
 .fan-list { position: absolute; inset: 0; outline: none; }
+/* Halo de la teinte en cours, posé derrière la pointe de la pastille choisie (dégradé seul, aucun flou) */
+.fan::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(min(340px, 46vw) 120px at 50% calc(var(--fan-tip) - var(--fan-out) + 10px),
+    color-mix(in srgb, var(--paint, #777) 34%, transparent), color-mix(in srgb, var(--paint, #777) 10%, transparent) 55%, transparent 100%);
+  /* entre en fondu depuis le haut de la bande : pas d'arête nette là où .fan rogne le halo */
+  -webkit-mask: linear-gradient(180deg, transparent 0, #000 40px); mask: linear-gradient(180deg, transparent 0, #000 40px); }
 .fan-rot { position: absolute; width: 0; height: 0; --s: -1; }
 .fan.moving .fan-rot { will-change: transform; }   /* au repos : pas de couche, les lames sont rastérisées nettes */
 
+/* Lames = pastilles de nuancier : bouts arrondis, 4 px d'air entre deux pastilles (bordure transparente,
+   fond rogné à la boîte de remplissage → les ombres « inset » restent à l'intérieur de la pastille). */
 .blade { position: absolute; top: calc(-1 * var(--R)); left: calc(var(--bw) / -2); width: var(--bw); height: var(--len);
-  --bw: var(--w); --ow: 0px; --oh: 0px; --m: var(--metal, 0);
-  /* Le long de la lame : léger jour à la pointe → teinte pure → sombre vers le pivot. Grain métal très discret.
-     Aucun reflet propre à la lame : le lustre est commun à tout l'arc (.fan-gloss). */
+  --bw: var(--w); --ow: 0px; --oh: 0px; --m: var(--metal, 0); --gx: clamp(1px, calc(var(--w) * .07), 2px); --rr: min(9px, calc(var(--bw) / 2 - var(--gx)));
+  border: 0 solid transparent; border-left-width: var(--gx); border-right-width: var(--gx);
+  background-clip: padding-box; background-origin: padding-box;
+  /* Le long de la pastille : jour à la pointe → teinte pure → sombre vers le pivot ; reflet vertical laqué ; grain métal. */
   background:
-    linear-gradient(180deg, rgb(255 255 255 / .13) 0, rgb(255 255 255 / 0) 14px, transparent 26px,
-      rgb(0 0 0 / .16) calc(var(--fan-h) - var(--fan-tip) - 24px), rgb(0 0 0 / .46) calc(var(--fan-h) - var(--fan-tip) + 40px)),
-    repeating-linear-gradient(0deg, rgb(255 255 255 / calc(var(--m) * .022)) 0 1px, transparent 1px 3px),
-    var(--c, #777);
-  border-radius: 2px 2px 0 0; cursor: pointer;
-  box-shadow: inset 1px 0 0 rgb(0 0 0 / .42);          /* la couture sombre de 1px entre deux lames */
+    radial-gradient(120% 22px at 50% 0, rgb(255 255 255 / .22), rgb(255 255 255 / .06) 60%, transparent 100%) padding-box,
+    linear-gradient(90deg, rgb(255 255 255 / .10) 0, transparent 22%, transparent 62%, rgb(255 255 255 / .07) 74%, transparent 86%, rgb(0 0 0 / .14) 100%) padding-box,
+    linear-gradient(180deg, rgb(255 255 255 / .16) 0, rgb(255 255 255 / 0) 16px, transparent 28px,
+      rgb(0 0 0 / .08) calc(var(--fan-h) - var(--fan-tip)), rgb(0 0 0 / .28) calc(var(--fan-h) - var(--fan-tip) + 48px)) padding-box,
+    repeating-linear-gradient(0deg, rgb(255 255 255 / calc(var(--m) * .022)) 0 1px, transparent 1px 3px) padding-box,
+    var(--c, #777) padding-box;
+  border-radius: calc(var(--rr) + var(--gx)) calc(var(--rr) + var(--gx)) 0 0 / var(--rr) var(--rr) 0 0; cursor: pointer;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .30), inset 1px 0 0 rgb(255 255 255 / .08), inset -1px 0 0 rgb(0 0 0 / .28);
   transform-origin: 50% var(--R);
   transform: rotate(calc(var(--a) + clamp(-1, var(--k) - var(--s), 1) * var(--dsel))) translateY(calc(-1 * (var(--ow) + var(--oh))));
   transition: transform 300ms var(--e-out), width 300ms var(--e-out), left 300ms var(--e-out); }
-/* La vague : la lame choisie sort de --fan-out et s'élargit (×2,2), ses voisines sortent de 46 % / 23 % */
-.blade.w0 { --ow: var(--o0); --bw: var(--ws); z-index: 3;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / .75), inset 1px 0 0 rgb(0 0 0 / .42), 0 0 0 1px rgb(10 10 11 / .5); }  /* filet clair à la pointe */
+/* La vague : la pastille choisie sort de --fan-out et s'élargit (×2,2), plus arrondie, liseré clair ; voisines à 46 % / 23 % */
+.blade.w0 { --ow: var(--o0); --bw: var(--ws); --rr: 14px; z-index: 3;
+  background:
+    radial-gradient(11px 3px at 50% 9px, rgb(255 255 255 / .85), rgb(255 255 255 / 0)) padding-box,
+    radial-gradient(120% 34px at 50% 0, rgb(255 255 255 / .30), rgb(255 255 255 / .06) 60%, transparent 100%) padding-box,
+    linear-gradient(90deg, rgb(255 255 255 / .12) 0, transparent 20%, transparent 64%, rgb(255 255 255 / .09) 74%, transparent 84%, rgb(0 0 0 / .16) 100%) padding-box,
+    linear-gradient(180deg, transparent 30px, rgb(0 0 0 / .06) calc(var(--fan-h) - var(--fan-tip)), rgb(0 0 0 / .26) calc(var(--fan-h) - var(--fan-tip) + 48px)) padding-box,
+    repeating-linear-gradient(0deg, rgb(255 255 255 / calc(var(--m) * .022)) 0 1px, transparent 1px 3px) padding-box,
+    var(--c, #777) padding-box;
+  box-shadow: inset 0 2px 0 rgb(255 255 255 / .7), inset 0 0 0 1px rgb(255 255 255 / .24), inset 2px 0 0 rgb(255 255 255 / .06), inset -2px 0 0 rgb(0 0 0 / .18); }
 .blade.w1 { --ow: var(--o1); z-index: 2; }
 .blade.w2 { --ow: var(--o2); z-index: 1; }
-.blade.hov { --oh: var(--fan-hover); }
-.fan-list:focus-visible .blade.w0 { box-shadow: inset 0 1px 0 rgb(255 255 255 / .75), 0 0 0 2px var(--text); }
+.blade.hov { --oh: var(--fan-hover); box-shadow: inset 0 1px 0 rgb(255 255 255 / .55), inset 0 0 0 1px rgb(255 255 255 / .14); }
+.fan-list:focus-visible .blade.w0 { box-shadow: inset 0 2px 0 rgb(255 255 255 / .70), inset 0 0 0 2px var(--text); }
 
 /* Dépliage d'arrivée : les lames partent empilées sous la lame choisie (--u0) et s'ouvrent en cascade ;
    la lame choisie sort en dernier. Transforms seulement ; fill « backwards » pour rendre la main aux transitions. */
@@ -400,8 +421,13 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
       transparent calc(100% - 46px), rgb(255 255 255 / .05) calc(100% - 18px), rgb(255 255 255 / .12) calc(100% - 4px), transparent 100%),
     radial-gradient(var(--hw) 72px at var(--cx) var(--fan-tip), rgb(255 255 255 / .09), transparent),
     linear-gradient(90deg, rgb(0 0 0 / .26), transparent 28%, transparent 72%, rgb(0 0 0 / .26));
-  -webkit-mask: radial-gradient(circle var(--R) at var(--cx) calc(var(--fan-tip) + var(--R)), #000 calc(100% - 1px), transparent 100%);
-          mask: radial-gradient(circle var(--R) at var(--cx) calc(var(--fan-tip) + var(--R)), #000 calc(100% - 1px), transparent 100%); }
+  /* 2e calque : secteur occupé par les lames (--g0, --gs écrits par app.js aux bouts de l'éventail) */
+  --sector: conic-gradient(from var(--g0, 180deg) at var(--cx) calc(var(--fan-tip) + var(--R)),
+    transparent 0, #000 1deg, #000 calc(var(--gs, 360deg) - 1deg), transparent var(--gs, 360deg));
+  -webkit-mask: radial-gradient(circle var(--R) at var(--cx) calc(var(--fan-tip) + var(--R)), #000 calc(100% - 1px), transparent 100%), var(--sector);
+  -webkit-mask-composite: source-in;
+          mask: radial-gradient(circle var(--R) at var(--cx) calc(var(--fan-tip) + var(--R)), #000 calc(100% - 1px), transparent 100%), var(--sector);
+          mask-composite: intersect; }
 
 /* Index : un filet de 1px et un petit triangle, fixes en haut au centre, au-dessus de la lame choisie */
 .fan-index { position: absolute; z-index: 2; left: 50%; top: calc(var(--fan-tip) - var(--fan-out) - 19px); width: 9px; height: 15px; margin-left: -4px;
@@ -413,9 +439,9 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 .fan-fams { position: absolute; z-index: 2; inset: 0; pointer-events: none; }
 .fan-fam { position: absolute; left: 0; top: 0; height: var(--fan-lh); padding: 0 1px; pointer-events: auto;
   font: 500 12px/var(--fan-lh) var(--f-ui); letter-spacing: .14em; text-transform: uppercase; white-space: nowrap;
-  color: var(--text); opacity: .55; transition: opacity var(--d-micro) var(--e-out); }
+  color: var(--muted); transition: color var(--d-micro) var(--e-out); }   /* plein, sans opacité : ≥ 3:1 */
 .fan-fam::before { content: ""; position: absolute; inset: -12px -8px; }       /* zone de toucher */
-.fan-fam.cur, .fan-fam:hover { opacity: 1; }
+.fan-fam.cur, .fan-fam:hover { color: var(--text); }
 .fan-fam.off { visibility: hidden; }
 .fan-fam:focus-visible { outline-offset: 2px; }
 
@@ -522,6 +548,10 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 .cx-head h2 em { font-style: italic; font-weight: 300; color: var(--muted); letter-spacing: 0; }
 .cx-bar { display: flex; align-items: center; gap: 12px; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 2px; margin: -2px; }
 .cx-bar::-webkit-scrollbar { display: none; }
+/* Débordement horizontal : fondu du bord où il reste du contenu (--fl / --fr écrits par app.js) */
+.cx-bar, .cx-strip {
+  -webkit-mask: linear-gradient(90deg, transparent 0, #000 var(--fl, 0px), #000 calc(100% - var(--fr, 0px)), transparent 100%);
+          mask: linear-gradient(90deg, transparent 0, #000 var(--fl, 0px), #000 calc(100% - var(--fr, 0px)), transparent 100%); }
 .cx-bar > :first-child { margin-left: auto; }
 .cx-seg { display: inline-flex; flex: none; border: 1px solid var(--line-2); }
 .cx-seg button, .cx-chip { height: 40px; padding: 0 14px; display: inline-flex; align-items: center; gap: 8px; flex: none;
@@ -817,7 +847,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   .top { gap: 8px; }
   .band { display: none; }
   .tool { width: 44px; height: 44px; padding: 0; justify-content: center; gap: 0; }
-  .tool + .tool::before, .tool .tl, .tool kbd { display: none; }
+  .tool .tl, .tool kbd { display: none; }
   #tSearch svg, #tAll svg { display: block; width: 18px; height: 18px; }
   #tFav { width: auto; min-width: 44px; padding: 0 10px; gap: 6px; }
   .tools .tool:last-child { margin-right: -10px; }
@@ -860,7 +890,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 /* ---------- Téléphone en paysage : fiche sur une ligne, la voiture reste visible ---------- */
 @media (max-height: 500px) and (orientation: landscape) {
   .crops { display: none; }
-  .top { height: 44px; }
+  .top { height: 45px; }   /* 44 px + filet */
   .mark .logo { width: 96px; height: 32px; }
   .dock-row { align-items: flex-end; gap: 16px; }
   .spec { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 12px; width: min(52vw, 440px); }
@@ -873,7 +903,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   .sp-name .l1, .sp-name .l2 { display: inline; }
   .sp-name .l2:not(:empty)::before { content: " "; }
   .sp-row { display: none; }
-  .ctrls { gap: 0; margin: 0 -10px -6px 0; }
+  .ctrls { gap: 0; margin: 0 -10px 0 0; }
   .act { width: 44px; height: 44px; justify-content: center; gap: 0; }
   .act .al { display: none; }
   .act svg { width: 20px; height: 20px; }
@@ -922,26 +952,23 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 /* Rig réduite par app.js (la voiture laisse la place à l'étiquette) : mêmes bords fondus qu'en portrait */
 .stage.narrow #shotNext, .stage.narrow .wipe { -webkit-mask: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
   mask: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%); }
-/* Portrait : la rig est plus étroite que l'écran — on fond les bords latéraux des rendus dans --bg (masque net, le titre n'est pas masqué) */
-@media (max-aspect-ratio: 1/1) {
-  #shotNext, .wipe { -webkit-mask: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
-         mask: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%); }
-}
+/* Portrait : la rig couvre désormais toute la largeur (app.js) ; les bords ne sont fondus que si elle reste plus étroite (.narrow) */
 
 /* ---------- Fond clair : encre sombre pour la barre haute et la fiche (contraste ≥ 4,5:1) ---------- */
 body.bg-light .top, body.bg-light .dock { --text: #141414; --muted: #4a4741; --faint: #5a5751; --line-2: rgba(0,0,0,.28); }
+body.bg-light .fan { --text: #141414; --muted: #4a4741; }
 body.bg-light .menu { --text: #f4f2ee; --muted: #aca8a1; --faint: #7d7a73; --line-2: rgba(255,255,255,.26); color: var(--text); }
 body.bg-light .stage::after { background: linear-gradient(180deg, transparent 0, transparent 72%, rgb(10 10 11 / .2) 100%); }
 
 /* ---------- Éclat de laque (borné à la carrosserie : masque de silhouette inversé) et lumière de studio ---------- */
 .flash, .studio { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .flash {
-  -webkit-mask: linear-gradient(#000 0 0), url("img/3500/_mask.webp") center / cover no-repeat; -webkit-mask-composite: xor;
-          mask: linear-gradient(#000 0 0), url("img/3500/_mask.webp") center / cover no-repeat; mask-composite: exclude; }
+  -webkit-mask: linear-gradient(#000 0 0), url("img/3500/_mask.webp?v=c7") center / cover no-repeat; -webkit-mask-composite: xor;
+          mask: linear-gradient(#000 0 0), url("img/3500/_mask.webp?v=c7") center / cover no-repeat; mask-composite: exclude; }
 .flash i { position: absolute; top: 0; bottom: 0; left: 0; width: 18%; opacity: 0; translate: -100% 0;
   background: linear-gradient(100deg, transparent 0, rgb(255 255 255 / .1) 28%, rgb(255 255 255 / .35) 50%, rgb(255 255 255 / .1) 72%, transparent 100%); }
 /* Lumière de studio : derrière la voiture (même masque que le titre), suit le pointeur (app.js, px entiers) */
-.studio { -webkit-mask: url("img/3500/_mask.webp") center / cover no-repeat; mask: url("img/3500/_mask.webp") center / cover no-repeat; }
+.studio { -webkit-mask: url("img/3500/_mask.webp?v=c7") center / cover no-repeat; mask: url("img/3500/_mask.webp?v=c7") center / cover no-repeat; }
 .studio i { position: absolute; left: -700px; top: -700px; width: 1400px; height: 1400px; border-radius: 50%; opacity: 0;
   background: radial-gradient(closest-side, rgb(255 255 255 / .06), rgb(255 255 255 / .03) 45%, rgb(255 255 255 / 0));
   transition: opacity 600ms var(--e-out); }

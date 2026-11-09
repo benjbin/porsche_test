@@ -8,8 +8,15 @@
 // Fluidité : la géométrie est mesurée dans refit()/resize, jamais dans pointermove ni paint().
 
 const IMG_W = 3500, IMG_H = 5000;
-const TEXT_Y = 0.452;                  // bas du titre, en fraction de la hauteur image (≈ toit)
+// Titre derrière la voiture : sa ligne de base est posée sous le toit (masque _car : haut du toit à 45,2 % de la
+// hauteur du rendu, au centre) de sorte que ~72 % de la hauteur de capitale reste au-dessus de la ligne de toit.
+const ROOF = 0.452;
+const T_CLEAR = 0.72;                  // part de la hauteur de capitale visible au-dessus du toit
+const P_CAP = 0.7, P_ASC = 1.05, P_DSC = 0.35;   // Poppins : capitale, ascendante, descendante (em)
+// Bas de la boîte du titre (line-height lh) pour un rendu de hauteur ih dont le haut est à top
+const titleBottom = (top, ih, size, lh) => top + ih * ROOF + (1 - T_CLEAR) * P_CAP * size + lh / 2 - ((P_ASC - P_DSC) / 2) * size;
 const SIZES = [1200, 2000, 3500];
+const IV = "?v=c7";                  // version des rendus : change à chaque régénération (cache navigateur)
 const NEXT_WAIT = 4000;                // attente max du rendu cible avant de passer en aplat
 const SWAP_OUT = 260;                  // sortie du nom de l'étiquette (.spec.swap : 240 ms + marge)
 const D = { micro: 140, ui: 220, panel: 360, paint: 560, ambient: 900 };   // miroir des tokens CSS
@@ -111,7 +118,7 @@ function measure() {
    Contrainte : bas des roues ≥ 20 px au-dessus du haut de l'étiquette (+ 6 px de parallaxe), sauf si la voiture
    est à ≥ 24 px de côté de l'étiquette. On remonte d'abord la rig (--lift), tant que le titre reste sous le bandeau ;
    sinon on réduit --z (la rig est dimensionnée, jamais transformée). Le reflet peut passer sous l'étiquette. */
-const CAR = { top: 0.436, bottom: 0.564, left: 0.214, right: 0.851 };
+const CAR = { top: 0.452, bottom: 0.571, left: 0.182, right: 0.821 };
 const carFit = { z: 0, lift: 0, gap: 0, ts: 1 };
 // Taille du titre : suit la voiture quand celle-ci est réduite (la composition titre/voiture est conservée)
 const titleSize = (sh, ts) => Math.max(1, Math.round(sh * 0.17 * ts));
@@ -119,8 +126,10 @@ function carBox(z, lift, sw, sh, ts = 1) {
   const rw = Math.round(sw * z), rh = Math.round(sh * z);
   const K = Math.max(rw / IMG_W, rh / IMG_H), iw = IMG_W * K, ih = IMG_H * K;
   const ox = Math.round((sw - rw) / 2) + (rw - iw) / 2, oy = Math.round((sh - rh) / 2) - lift + (rh - ih) / 2;
+  // Taille estimée : réduite par la largeur sur les écrans étroits (metrics() ramène le nom à 90 % de la largeur)
+  const S = Math.min(titleSize(sh, ts), Math.round(sw * 0.2)), lh = Math.round(S * 0.94);
   return { top: oy + ih * CAR.top, bottom: oy + ih * CAR.bottom, left: ox + iw * CAR.left, right: ox + iw * CAR.right,
-    titleTop: oy + ih * TEXT_Y - Math.round(titleSize(sh, ts) * 0.94) };   // haut de la boîte du titre
+    ih, oy, S, titleTop: titleBottom(oy, ih, S, lh) - lh };   // haut de la boîte du titre
 }
 function fitCar() {
   const spec = document.querySelector(".spec"), top = document.querySelector(".top");
@@ -135,6 +144,12 @@ function fitCar() {
   const band = top ? top.offsetTop + top.offsetHeight + 8 : 0;
   const limit = lab.top - 20 - 6;
   const zMin = Math.min(z0, 0.62);
+  // Portrait : le bloc titre + voiture est centré (optiquement, un peu au-dessus) entre le bandeau et l'étiquette
+  const centred = (b) => {
+    const above = T_CLEAR * P_CAP * b.S + 8, blockH = b.bottom - b.top + above;
+    const goal = band + Math.max(0, (limit - band - blockH) * 0.5);
+    return b.top - above - goal;
+  };
   let z = z0, lift = lift0, ts = 1;
   for (;; z = Math.round((z - 0.01) * 100) / 100) {
     if (z < zMin) { z = zMin; break; }
@@ -143,15 +158,37 @@ function fitCar() {
     const beside = b.left - 6 >= lab.right + 24 || b.right + 6 <= lab.left - 24;
     const need = beside ? 0 : b.bottom - limit;          // remontée nécessaire
     const room = b.titleTop - band;                      // remontée possible sans passer le titre sous le bandeau
-    lift = Math.max(Math.min(lift0, room), need);
+    const want = sh > sw ? Math.max(lift0, centred(b)) : lift0;
+    lift = Math.max(Math.min(want, room), need);
     if (beside || need <= room) break;
   }
   lift = Math.round(lift);
   carFit.z = z; carFit.lift = lift; carFit.ts = ts; carFit.gap = Math.round(lab.top - carBox(z, lift, sw, sh, ts).bottom);
   if (z !== z0) root.style.setProperty("--z", String(z));
   root.style.setProperty("--lift", lift + "px");
-  // Rig plus étroite que l'écran : bords latéraux fondus dans --bg (comme en portrait)
-  stage.classList.toggle("narrow", Math.round(sw * z) < sw);
+  sizeRig(z, lift, sw, sh);
+}
+/* La rig couvre tout l'écran quand le rendu le permet : on l'agrandit autour de son centre (même échelle « cover »,
+   donc même voiture au même endroit) pour que le rendu, et non un aplat, remplisse le bas de l'écran une fois
+   la voiture remontée, et les côtés en portrait. Marges : amplitude de la parallaxe (10 px / 6 px). Px entiers. */
+const PAR_X = 10, PAR_Y = 6;
+function sizeRig(z, lift, sw, sh) {
+  const rw0 = Math.round(sw * z), rh0 = Math.round(sh * z);
+  const K = Math.max(rw0 / IMG_W, rh0 / IMG_H), iw = Math.floor(IMG_W * K), ih = Math.floor(IMG_H * K);
+  const l0 = Math.round((sw - rw0) / 2), t0 = Math.round((sh - rh0) / 2);
+  const even = (v) => Math.max(0, Math.ceil(v / 2));     // extension par côté (garde le centre au px entier)
+  let ex = even(sw + 2 * PAR_X - rw0), ey = 0;
+  while (ex > 0 && rw0 + 2 * ex > Math.max(rw0, iw)) ex--;
+  const top = t0 - lift, bot = top + rh0;                // bord haut / bas à l'écran, sans extension
+  ey = Math.max(0, Math.ceil(Math.max(top + PAR_Y, sh + PAR_Y - bot)));
+  while (ey > 0 && rh0 + 2 * ey > Math.max(rh0, ih)) ey--;
+  const rw = rw0 + 2 * ex, rh = rh0 + 2 * ey;
+  Object.assign(rig.style, { width: rw + "px", height: rh + "px", left: l0 - ex + "px", top: t0 - ey + "px" });
+  // Ce que la rig ne couvre pas (portrait : sous la voiture remontée) : dégradé du haut du rendu (--bg) vers son sol
+  root.style.setProperty("--bg-y0", Math.max(0, t0 - ey - lift) + "px");
+  root.style.setProperty("--bg-y1", Math.min(sh, t0 - ey - lift + rh) + "px");
+  // Rig plus étroite que l'écran : bords latéraux fondus dans le fond
+  stage.classList.toggle("narrow", rw < sw);
 }
 
 /* ---------- Couleur ---------- */
@@ -180,20 +217,53 @@ function lstar([r, g, b]) {
   const Y = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
   return (Y <= 216 / 24389 ? (Y * 24389) / 27 : 116 * Math.cbrt(Y) - 16) / 100;
 }
-// Ton sur ton : même teinte, saturation ×0,9, L +0,2/−0,15, avec un écart perçu d'au moins 0,17
+// Luminance relative (WCAG) et contraste
+function relY([r, g, b]) {
+  const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+const contrastY = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+// Ton sur ton : même teinte, saturation ×0,9 (0 pour les neutres : blancs et gris ne sont pas teintés),
+// L +0,2/−0,15 avec un écart perçu d'au moins 0,17 ; puis, si l'on connaît le fond réel derrière le titre
+// (band : échantillon du rendu au-dessus du toit), on s'en éloigne pas à pas jusqu'à un contraste ≥ 2:1
+// (titre décoratif). Teintes claires (L* > 0,7) : le titre fonce.
 const tcCache = new Map();
-function titleColor(hex) {
-  let out = tcCache.get(hex);
+function titleColor(hex, band = null) {
+  const key = band ? `${hex}|${band.key}` : hex;
+  let out = tcCache.get(key);
   if (out) return out;
-  const [h, s, l] = hsl(hex), s2 = s * 0.9, up = l < 0.5, base = lstar(rgbOf(hex));
-  let L = up ? l + 0.2 : l - 0.15;
-  for (let i = 0; i < 60 && Math.abs(lstar(hslToRgb(h, s2, L)) - base) < 0.17; i++) {
-    const n = L + (up ? 0.01 : -0.01);
-    if (n < 0 || n > 1) break;
-    L = n;
+  const [h, s, l] = hsl(hex), s2 = s < 0.1 ? 0 : s * 0.9, base = lstar(rgbOf(hex));
+  const col = (L) => hslToRgb(h, s2, clamp(L, 0, 1));
+  const start = (up) => {
+    let L = up ? l + 0.2 : l - 0.15;
+    for (let i = 0; i < 60 && Math.abs(lstar(col(L)) - base) < 0.17; i++) {
+      const n = L + (up ? 0.01 : -0.01);
+      if (n < 0 || n > 1) break;
+      L = n;
+    }
+    return clamp(L, 0, 1);
+  };
+  let L;
+  if (!band) L = start(base > 0.7 ? false : l < 0.5);
+  else {
+    // Éloignement du fond : contraste ≥ 2:1 sur la moyenne de la bande, ≥ 1,5:1 sur son pixel le plus proche
+    const ok = (L, up) => { const y = relY(col(L)); return Math.min(contrastY(y, band.y), contrastY(y, up ? band.hi : band.lo)); };
+    const run = (up) => {
+      let L = start(up);
+      for (let i = 0; i < 100 && (contrastY(relY(col(L)), band.y) < 2 || ok(L, up) < 1.5); i++) {
+        const n = L + (up ? 0.01 : -0.01);
+        if (n < 0 || n > 1) break;
+        L = n;
+      }
+      return [L, ok(L, up)];
+    };
+    const up = base > 0.7 ? false : lstar(band.avg) < 0.55;
+    const a = run(up);
+    L = a[0];
+    if (contrastY(relY(col(L)), band.y) < 2) { const b = run(!up); if (b[1] > a[1]) L = b[0]; }
   }
-  out = `hsl(${Math.round(h)} ${(s2 * 100).toFixed(1)}% ${(clamp(L, 0, 1) * 100).toFixed(1)}%)`;
-  tcCache.set(hex, out);
+  out = `hsl(${Math.round(h)} ${(s2 * 100).toFixed(1)}% ${(L * 100).toFixed(1)}%)`;
+  tcCache.set(key, out);
   return out;
 }
 
@@ -218,25 +288,41 @@ const step = (dir) => nb(dest(), dir);
 
 /* ---------- Fond échantillonné (--bg) ---------- */
 
-const bgCache = new Map();     // code -> [r, g, b]
+const bgCache = new Map();     // code -> [r, g, b] : pixel en haut à gauche du rendu
+const floorCache = new Map();  // code -> [r, g, b] : sol (moyenne des dernières lignes du rendu)
+const bandCache = new Map();   // code -> fond derrière le titre (bande au-dessus du toit) : { avg, y, lo, hi, key }
 let bgCtx = null;
 function sampleBg(el, code) {
   if (bgCache.has(code)) return;
   try {
-    if (!bgCtx) bgCtx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d", { willReadFrequently: true });
+    if (!bgCtx) bgCtx = Object.assign(document.createElement("canvas"), { width: 32, height: 17 }).getContext("2d", { willReadFrequently: true });
     if (!bgCtx || !el.naturalWidth) return;
-    bgCtx.clearRect(0, 0, 1, 1);
-    bgCtx.drawImage(el, 0, 0, 1, 1, 0, 0, 1, 1);       // pixel en haut à gauche du rendu
-    const [r, g, b, a] = bgCtx.getImageData(0, 0, 1, 1).data;
-    if (!a) return;
-    bgCache.set(code, [r, g, b]);
-    if (started && code === COLORS[idx]?.code) applyBg();
+    const nw = el.naturalWidth, nh = el.naturalHeight;
+    bgCtx.clearRect(0, 0, 32, 17);
+    bgCtx.drawImage(el, 0, 0, 1, 1, 0, 16, 1, 1);                                         // coin haut gauche
+    bgCtx.drawImage(el, nw * 0.25, nh * (ROOF - 0.05), nw * 0.5, nh * 0.045, 0, 0, 32, 8);  // bande du titre
+    bgCtx.drawImage(el, nw * 0.1, nh * 0.975, nw * 0.8, nh * 0.025, 0, 8, 32, 8);           // sol
+    const d = bgCtx.getImageData(0, 0, 32, 17).data;
+    const px = (i) => [d[i], d[i + 1], d[i + 2]];
+    const corner = px((16 * 32) * 4);
+    if (!d[(16 * 32) * 4 + 3]) return;
+    const sum = (r0) => { const t = [0, 0, 0]; for (let j = r0; j < r0 + 8; j++) for (let i = 0; i < 32; i++) { const p = px((j * 32 + i) * 4); t[0] += p[0]; t[1] += p[1]; t[2] += p[2]; } return t.map((v) => Math.round(v / 256)); };
+    let lo = 1, hi = 0;
+    for (let k = 0; k < 256; k++) { const y = relY(px(k * 4).map((v) => v / 255)); lo = Math.min(lo, y); hi = Math.max(hi, y); }
+    const avg = sum(0).map((v) => v / 255);
+    bandCache.set(code, { avg, y: relY(avg), lo, hi, key: sum(0).join(",") });
+    floorCache.set(code, sum(8));
+    bgCache.set(code, corner);
+    if (!started) return;
+    if (code === COLORS[idx]?.code) { applyBg(); applyTitleColor(titleCur, COLORS[idx]); root.style.setProperty("--title", titleColor(COLORS[idx].hex, bandCache.get(code))); }
+    if (code === peekColor?.code) applyTitleColor(titleNext, peekColor);
   } catch { /* canvas teinté (file://) : pas de --bg, le CSS garde son repli */ }
 }
 const rgbCss = ([r, g, b]) => `rgb(${r} ${g} ${b})`;
 function applyBg() {
-  const c = bgCache.get(COLORS[idx]?.code);
+  const code = COLORS[idx]?.code, c = bgCache.get(code), f = floorCache.get(code);
   if (c) root.style.setProperty("--bg", rgbCss(c));
+  if (f) root.style.setProperty("--bg-floor", rgbCss(f));
   updateInk();
 }
 // Voile du haut dosé sur le rendu affiché : on mesure la zone la plus claire derrière la barre haute
@@ -257,7 +343,8 @@ function updateScrim(c) {
     for (let i = 0; i < d.length; i += 4) v = Math.max(v, lstar([d[i] / 255, d[i + 1] / 255, d[i + 2] / 255]));
     // v : L* max (0..1), proche de la valeur sRGB ; le texte est vers 64 px, où le voile vaut 70 % de --scrim-t
     const need = v > 0.44 ? (v - 0.44) / (v - 0.04) / 0.7 : 0;
-    root.style.setProperty("--scrim-t", clamp(need, 0.45, 0.85).toFixed(2));
+    const min = lstar(rgbOf(c.hex)) > 0.7 ? 0.55 : 0.45;                 // teintes claires : bandeau plus dense
+    root.style.setProperty("--scrim-t", clamp(need, min, 0.85).toFixed(2));
   } catch { /* canvas teinté : le voile garde sa valeur par défaut */ }
 }
 // Aplat clair (sans rendu) : barre haute et fiche passent à l'encre sombre (contraste ≥ 4,5:1)
@@ -275,7 +362,7 @@ function imgUrl(code) {
   const k = Math.max((geo.sw * geo.z) / IMG_W, (geo.sh * geo.z) / IMG_H);
   const need = IMG_W * k * geo.dpr;
   const w = SIZES.find((s) => s >= need) ?? SIZES[SIZES.length - 1];
-  return `img/${w}/${code}.webp`;
+  return `img/${w}/${code}.webp${IV}`;
 }
 
 // decode() peut ne jamais se résoudre (onglet/vue non rendu) : attente bornée, jamais bloquante.
@@ -300,7 +387,7 @@ function load(url) {
 async function loadAny(code, url) {
   if (await load(url)) return url;
   for (const s of [...SIZES].reverse()) {
-    const u = `img/${s}/${code}.webp`;
+    const u = `img/${s}/${code}.webp${IV}`;
     if (u !== url && (await load(u))) return u;
   }
   return null;
@@ -418,8 +505,8 @@ function metrics(c, el) {
     set(size);
     w = el.getBoundingClientRect().width;
   }
-  const K = Math.max(geo.rw / IMG_W, geo.rh / IMG_H), oy = (geo.rh - IMG_H * K) / 2;
-  m = { text, size, lh: Math.max(1, Math.round(size * 0.94)), left: Math.round((geo.rw - w) / 2), ty: Math.round(oy + IMG_H * K * TEXT_Y) };
+  const K = Math.max(geo.rw / IMG_W, geo.rh / IMG_H), oy = (geo.rh - IMG_H * K) / 2, lh = Math.max(1, Math.round(size * 0.94));
+  m = { text, size, lh, left: Math.round((geo.rw - w) / 2), ty: Math.round(titleBottom(oy, IMG_H * K, size, lh)) };
   mcache.set(key, m);
   return m;
 }
@@ -432,7 +519,11 @@ function applyTitle(el, c) {
   el.style.marginInline = "0";
   el.style.left = m.left + "px";
   el.style.setProperty("--ty", m.ty + "px");
-  el.style.setProperty("--c", titleColor(c.hex));
+  applyTitleColor(el, c);
+}
+// Couleur du titre : dérivée du fond réel derrière lui dès que le rendu a été échantillonné
+function applyTitleColor(el, c) {
+  if (c) el.style.setProperty("--c", titleColor(c.hex, bandCache.get(c.code)));
 }
 // Au repos : prépare les mesures des voisines pour que le geste n'ait rien à mesurer.
 const idle = window.requestIdleCallback ? (cb) => requestIdleCallback(cb, { timeout: 400 }) : (cb) => setTimeout(cb, 60);
@@ -476,6 +567,9 @@ function paint() {
   const bc = a && bgCache.get(COLORS[idx]?.code), bn = a && peekColor && bgCache.get(peekColor.code);
   if (bc && bn) stage.style.setProperty("--bg", rgbCss(mix(bc, bn, a)));
   else stage.style.removeProperty("--bg");
+  const fc = a && floorCache.get(COLORS[idx]?.code), fn = a && peekColor && floorCache.get(peekColor.code);
+  if (fc && fn) stage.style.setProperty("--bg-floor", rgbCss(mix(fc, fn, a)));
+  else stage.style.removeProperty("--bg-floor");
   linkFan();
 }
 function setMoving(on) { stage.classList.toggle("moving", on); }
@@ -559,7 +653,7 @@ function nameSet(c, reveal = false) {
 // Ligne 1 : au plus 2 lignes et aucun mot plus large que l'étiquette ; sinon la taille descend (px entiers)
 function fitName() {
   if (!nameEl) return;
-  nameEl.style.fontSize = "";
+  nameEl.style.fontSize = ""; nameEl.style.lineHeight = "";
   const base = Math.round(parseFloat(getComputedStyle(nameEl).fontSize)) || 40;
   const compact = getComputedStyle(nameEl).whiteSpace === "nowrap";
   const min = compact ? 16 : 22;
@@ -568,9 +662,11 @@ function fitName() {
     const wide = [...nameL1.children, ...nameL2.children].some((w) => w.offsetWidth > nameEl.clientWidth + 1);
     return wide || nameL1.offsetHeight > sz * 2.2;
   };
+  // Taille et interligne toujours en px entiers (la base CSS dépend de vh ; 1,04 em donnerait des demi-pixels)
+  const set = (v) => { nameEl.style.fontSize = v + "px"; nameEl.style.lineHeight = Math.round(v * 1.04) + "px"; };
   let sz = base;
-  nameEl.style.fontSize = sz + "px";                   // toujours un px entier (la base CSS dépend de vh)
-  while (sz > min && tooBig(sz)) { sz -= 2; nameEl.style.fontSize = sz + "px"; }
+  set(sz);
+  while (sz > min && tooBig(sz)) { sz -= 2; set(sz); }
 }
 function setBead(c) {
   if (!beadEl || !c) return;
@@ -699,7 +795,7 @@ function announce(i) {
 function applyMeta() {
   const c = COLORS[idx];
   root.style.setProperty("--paint", c.hex);
-  root.style.setProperty("--title", titleColor(c.hex));
+  root.style.setProperty("--title", titleColor(c.hex, bandCache.get(c.code)));
   applyBg();
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", c.hex);
   document.title = `${c.name} — Atelier 911`;
@@ -1012,7 +1108,10 @@ function measureFan() {
   const ctrlW = ctrls?.offsetWidth ?? 0, rowH = Math.max(spec?.offsetHeight ?? 0, ctrls?.offsetHeight ?? 0);
   const dx = Math.min(W / 2 - padL - specW, W / 2 - padR - ctrlW);
   const arcY = (d) => fan.tip + fan.R - Math.sqrt(Math.max(0, fan.R * fan.R - d * d));
-  const dockB = dx <= fan.ws / 2 + 24 ? fan.H + 4 : clamp(Math.round(fan.H - arcY(dx) + 14), 12, fan.H + 4);
+  // Les commandes peuvent descendre sous la ligne de l'étiquette (marge négative, position absolue sur téléphone) :
+  // on garde toujours ≥ 12 px entre leur bas et l'éventail (le haut de sa bande, ou l'arc là où elles se trouvent).
+  const row = ctrls?.parentElement, over = ctrls && row ? Math.max(0, Math.round(ctrls.offsetTop + ctrls.offsetHeight - row.offsetHeight)) : 0;
+  const dockB = dx <= fan.ws / 2 + 24 ? fan.H + 12 + over : clamp(Math.round(fan.H - arcY(dx) + 12 + over), 12, fan.H + 12 + over);
   root.style.setProperty("--dock-b", dockB + "px");
   const y1 = fan.H - dockB, y0 = y1 - rowH;                 // zones de la fiche / des commandes, repère de l'éventail
   fan.boxes = y1 > 0 ? [[padL, y0, padL + specW, y1], [W - padR - ctrlW, y0, W - padR, y1]] : [];
@@ -1023,7 +1122,7 @@ function measureFan() {
   fan.avoid = [[padL, vt, padL + specW, vb], [W - padR - ctrlW, vb - ctrlH, W - padR, vb]];
   fan.cardSized = false;                                  // mesurée au premier affichage (polices chargées)
   placeHint(spec, ctrls);
-  fan.wa = null;
+  fan.wa = null; fan.gv = null;
 }
 
 // Angle visuel d'une lame : sa place + l'ouverture autour de la lame choisie
@@ -1049,6 +1148,24 @@ function setAngle(a) {
   const k = nearest(a);
   if (k !== fan.k) onCentred(k);
   placeLabels();
+  glossSpan();
+}
+// Lustre : limité aux angles occupés par les lames (aux deux bouts de l'éventail, l'arc vide reste nu).
+// Mis à jour seulement quand un bout est à l'écran ; sinon le masque couvre tout (une seule écriture).
+function glossSpan() {
+  if (!fan.R || !fan.theta.length) return;
+  const hw = ((fan.w / 2 + 2) / fan.R) * DEG, hs = ((fan.ws / 2 + 2) / fan.R) * DEG;
+  const n = COLORS.length - 1;
+  const a0 = fan.angle + eff(0) - (fan.s === 0 ? hs : hw), a1 = fan.angle + eff(n) + (fan.s === n ? hs : hw);
+  const vis = Math.asin(Math.min(1, fan.W / 2 / fan.R)) * DEG + 2;
+  const v = a0 > -vis || a1 < vis ? `${a0.toFixed(2)}deg|${(a1 - a0).toFixed(2)}deg` : "";
+  if (v === fan.gv) return;
+  fan.gv = v;
+  const g = fanEl.querySelector(".fan-gloss");
+  if (!g) return;
+  if (!v) { g.style.removeProperty("--g0"); g.style.removeProperty("--gs"); return; }
+  const [g0, gs] = v.split("|");
+  g.style.setProperty("--g0", g0); g.style.setProperty("--gs", gs);
 }
 function onCentred(k) {
   fan.k = k;
@@ -1070,7 +1187,7 @@ function onCentred(k) {
 }
 
 function placeLabels() {
-  const { R, H, W, cx, lh } = fan, rc = R + 10 + lh / 2, py = fan.tip + R, zone = fan.ws / 2 + 10;
+  const { R, H, W, cx, lh } = fan, rc = R + 10 + lh / 2, py = fan.tip + R, zone = fan.ws / 2 + 24;   // ≥ 24 px de l'index / de la lame choisie
   const shown = [];
   for (const f in fan.labels) {
     const el = fan.labels[f], lw = fan.lw[f] || 48;
@@ -1229,7 +1346,7 @@ function bladeTip(i, extra = 0) {
   const phi = (fan.angle + eff(i)) / DEG, r = fan.R + o + extra;
   return { x: fan.cx + r * Math.sin(phi), y: fan.top + fan.tip + fan.R - r * Math.cos(phi) };
 }
-const thumbUrl = (c) => `img/thumb/${c.code}.webp`;
+const thumbUrl = (c) => `img/thumb/${c.code}.webp${IV}`;
 const thumbs = new Map();
 function preloadThumbs(i, r = 6) {
   for (let d = -r; d <= r; d++) {
@@ -1725,7 +1842,7 @@ function placeHint(spec, ctrls) {
   if (!h || hinted || !spec) return;
   h.classList.remove("on-fan");
   const hr = h.getBoundingClientRect();
-  const hit = (b) => b && hr.left < b.right && hr.right > b.left && hr.top < b.bottom + 8 && hr.bottom > b.top - 8;
+  const hit = (b) => b && hr.left < b.right + 24 && hr.right > b.left - 24 && hr.top < b.bottom + 8 && hr.bottom > b.top - 8;
   if (hit(spec.getBoundingClientRect()) || hit(ctrls?.getBoundingClientRect())) h.classList.add("on-fan");
 }
 function hideHint() {
@@ -1845,11 +1962,14 @@ async function shareSelection() {
 const CX_MODES = ["rideau", "cote", "duel"];
 const CX_MODE_L = { rideau: "Rideau", cote: "Côte à côte", duel: "Duel" };
 const CX_STUDIOS = ["studio", "gris", "jour", "nuit"];
-const CX_STUDIO_L = { studio: "Studio", gris: "Gris neutre", jour: "Plein jour", nuit: "Nuit" };
+const CX_STUDIO_L = { studio: "Studio · fond teinté", gris: "Gris neutre", jour: "Plein jour", nuit: "Nuit" };
+// Dans les liens, le décor « studio » s'écrit « teinte » ; l'ancien « studio » est ramené au décor par défaut
+const cxStudioParam = (s) => (s === "studio" ? "teinte" : s);
 const CX_GRAD = { gris: [[189, 189, 187], [154, 154, 152]], jour: [[242, 241, 237], [217, 215, 209]], nuit: [[13, 14, 16], [26, 27, 30]] };
 const CX_MAX = 4, CX_MIN = 2;
-// Cadre « voiture seule », en fractions du rendu : centré sur la silhouette (21,4 %–85,1 % × 43,6 %–56,4 %), 2,5:1
-const CROP = { x: 0.1725, w: 0.72 };
+// Cadre « voiture seule », en fractions du rendu, 2,5:1 : centré sur la silhouette (_car : 18,5 %–81,7 % de la largeur)
+// avec ~7 % d'air de chaque côté — la voiture ne touche jamais le bord de la carte.
+const CROP = { x: 0.185 - 0.0525, w: 0.6317 + 2 * 0.0525 };
 CROP.h = (CROP.w * IMG_W) / 2.5 / IMG_H;
 CROP.y = 0.5 - CROP.h / 2;
 const phonePortrait = matchMedia("(max-width: 640px) and (orientation: portrait)");
@@ -1865,7 +1985,7 @@ const cx = {
 const cxPanel = () => $("cmpPanel");
 const cxView = () => $("cxView");
 const cxColor = (i) => COLORS[i];
-const nativeMax = () => Math.floor((3500 / (devicePixelRatio || 1)) * CROP.w);   // largeur « voiture » max sans agrandir le 3500
+const nativeMax = () => Math.floor((SIZES.at(-1) / (devicePixelRatio || 1)) * CROP.w);   // largeur « voiture » max sans agrandir le plus grand rendu
 
 /* --- Couleur : CIE L*a*b* (D65) depuis la teinte de référence --- */
 function lab([r, g, b]) {
@@ -1894,7 +2014,7 @@ const nameHTML = (name) => { const [a, b] = splitName(name); return esc(a) + (b 
 /* --- Images : rendu + masque « voiture seule », course gagnée par la dernière demande --- */
 const cxSize = (wi, min = 2000) => SIZES.find((s) => s >= Math.max(min, wi * (devicePixelRatio || 1))) ?? SIZES[SIZES.length - 1];
 function cxImg(el, c, size, masked) {
-  const url = `img/${size}/${c.code}.webp`, mk = masked ? `img/${size}/_car.webp` : "";
+  const url = `img/${size}/${c.code}.webp${IV}`, mk = masked ? `img/${size}/_car.webp${IV}` : "";
   const want = url + "|" + mk;
   el.dataset.want = want;
   const box = el.closest(".cx-car");
@@ -1951,11 +2071,11 @@ function cxNormalise(list) {
   for (let j = (out[out.length - 1] + 1) % COLORS.length; out.length < CX_MIN; j = (j + 1) % COLORS.length) if (!out.includes(j)) out.push(j);
   return out;
 }
-const defaultStudio = (mode) => (mode === "rideau" ? "studio" : "gris");
+const defaultStudio = () => "gris";            // « Gris neutre » par défaut, dans tous les modes
 
 function cxHash() {
   if (!isOpen("cmpPanel")) return;
-  writeHash(`#cmp=${cx.list.map((i) => COLORS[i].code).join(",")}&m=${cx.mode}&s=${cx.studio}`);
+  writeHash(`#cmp=${cx.list.map((i) => COLORS[i].code).join(",")}&m=${cx.mode}&s=${cxStudioParam(cx.studio)}`);
 }
 function cxSay(msg) { const l = $("cxLive"); if (l) { l.textContent = ""; l.textContent = msg; } }
 
@@ -2120,9 +2240,18 @@ function snapPx(el) {
   const dx = Math.round(r.left) - r.left, dy = Math.round(r.top) - r.top;
   if (dx || dy) el.style.translate = `${dx.toFixed(3)}px ${dy.toFixed(3)}px`;
 }
+// Bandes qui défilent horizontalement (décors, finalistes) : fondu du bord là où il reste du contenu (masque, sans flou)
+function cxFade(el) {
+  if (!el) return;
+  const max = el.scrollWidth - el.clientWidth, x = el.scrollLeft;
+  el.style.setProperty("--fl", max > 1 && x > 1 ? "32px" : "0px");
+  el.style.setProperty("--fr", max > 1 && x < max - 1 ? "32px" : "0px");
+}
+const cxFades = () => { cxFade(document.querySelector("#cmpPanel .cx-bar")); cxFade($("cxStrip")); };
 function cxLayout() {
   const v = cxView(), panel = cxPanel();
   if (!v || !panel?.classList.contains("open")) return;
+  cxFades();
   const cs = getComputedStyle(v);
   const W = Math.floor(v.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
   const H = Math.floor(v.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
@@ -2197,9 +2326,9 @@ function cxLayout() {
   const gw = cols * (side ? cw + MG + MW : cw) + (cols - 1) * gxx;
   const ml = Math.max(0, Math.floor((W - gw) / 2));
   grid.style.margin = `0 0 0 ${ml}px`;
-  const mt = Math.max(0, Math.floor((H - extra - grid.offsetHeight) / 2));
-  if (head) { head.style.margin = `${mt}px 0 ${gy}px ${ml}px`; head.style.width = gw + "px"; }
-  else grid.style.marginTop = mt + "px";
+  // Calée en haut, sous le bandeau : pas de grandes bandes vides au-dessus de la grille
+  if (head) { head.style.margin = `0 0 ${gy}px ${ml}px`; head.style.width = gw + "px"; }
+  else grid.style.marginTop = "0px";
   const size = cxSize(wi);
   cells.forEach((cell) => {
     const im = cell.querySelector("img");
@@ -2311,11 +2440,11 @@ function cxShowWinner() {
 }
 async function cxShare() {
   const d = cx.duel, codes = d?.winner != null ? [d.winner, ...cx.list.filter((i) => i !== d.winner)] : cx.list;
-  const url = location.href.split("#")[0] + `#cmp=${codes.map((i) => COLORS[i].code).join(",")}&m=cote&s=${cx.studio}`;
+  const url = location.href.split("#")[0] + `#cmp=${codes.map((i) => COLORS[i].code).join(",")}&m=cote&s=${cxStudioParam(cx.studio)}`;
   toast((await copyText(url)) ? "Lien du face à face copié" : "Copie impossible");
 }
 
-/* --- Loupe synchronisée (rendus 3500, ≥ 1 px image par px physique) --- */
+/* --- Loupe synchronisée (plus grand rendu, ≥ 1 px image par px physique) --- */
 const cxLoupeOn = () => cxLoupeOk() && (cx.loupe.toggled || cx.loupe.shift || cx.loupe.touch);
 function cxLoupeUpdate() {
   const L = cx.loupe, panel = cxPanel();
@@ -2343,7 +2472,7 @@ function cxLoupeBuild() {
   L.size = phonePortrait.matches || phoneLand.matches ? 150 : 220;
   cxLoupeRects();
   const dpr = devicePixelRatio || 1;
-  L.lw = Math.max(cxImgW(cx.cw), Math.min(Math.floor(3500 / dpr), Math.round(cxImgW(cx.cw) * 3.5)));   // ≈ ×3,5, jamais au-delà du 3500 natif
+  L.lw = Math.max(cxImgW(cx.cw), Math.min(Math.floor(SIZES.at(-1) / dpr), Math.round(cxImgW(cx.cw) * 3.5)));   // ≈ ×3,5, jamais au-delà du rendu natif
   L.lh = Math.round((L.lw * IMG_H) / IMG_W);
   const prog = $("cxProg");
   L.need = L.rects.length; L.done = 0;
@@ -2357,7 +2486,7 @@ function cxLoupeBuild() {
     el.querySelector(".cx-lw").style.background = masked ? "var(--lbg)" : (bgCache.get(c.code) ? rgbCss(bgCache.get(c.code)) : "var(--c)");
     cell.append(el);
     const img = el.querySelector("img");
-    cxImg(img, c, 3500, masked).then(() => {
+    cxImg(img, c, SIZES.at(-1), masked).then(() => {
       if (gen !== cx.gen) return;
       L.done++;
       cxProgress();
@@ -2466,6 +2595,7 @@ function cxPopPick(i) {
 function buildCompare() {
   const panel = cxPanel(), v = cxView(), strip = $("cxStrip");
   if (!panel || !v || !strip) return null;
+  [panel.querySelector(".cx-bar"), strip].forEach((el) => el?.addEventListener("scroll", () => cxFade(el), { passive: true }));
   panel.querySelectorAll("[data-m]").forEach((b) => b.addEventListener("click", () => cxMode(b.dataset.m)));
   panel.querySelectorAll("[data-s]").forEach((b) => b.addEventListener("click", () => cxStudio(b.dataset.s)));
   $("cxLoupe")?.addEventListener("click", () => cxLoupeToggle());
@@ -2851,8 +2981,8 @@ async function exportImage(fmt, c = COLORS[idx]) {
     toast("Préparation…", { duration: 20000 });
     const hero = heroName(c.name);
     const [bg, mask] = await Promise.all([
-      loadImg(`img/3500/${c.code}.webp`).catch(() => loadImg(`img/2000/${c.code}.webp`)),
-      loadImg("img/3500/_mask.webp"),
+      loadImg(`img/3500/${c.code}.webp${IV}`).catch(() => loadImg(`img/2000/${c.code}.webp${IV}`)),
+      loadImg(`img/3500/_mask.webp${IV}`),
       Promise.all([
         document.fonts.load(TITLE_FONT(100), hero),
         document.fonts.load('500 40px "Poppins"', c.name),
@@ -2879,8 +3009,8 @@ async function exportImage(fmt, c = COLORS[idx]) {
     const wFit = t.measureText(hero).width;                 // opsz auto : recalage si le dessin s'élargit
     if (wFit > W * 0.9) { size *= (W * 0.9) / wFit; setTitleFont(size); }
     t.textAlign = "center"; t.textBaseline = "alphabetic";
-    t.fillStyle = titleColor(c.hex);
-    t.fillText(hero, W / 2, y + h * TEXT_Y - size * 0.02);
+    t.fillStyle = titleColor(c.hex, bandCache.get(c.code));
+    t.fillText(hero, W / 2, y + h * ROOF + (1 - T_CLEAR) * P_CAP * size);   // même calage que le showroom
     t.globalCompositeOperation = "destination-in";
     t.imageSmoothingQuality = "high";
     t.drawImage(mask, x, y, w, h);
@@ -2952,12 +3082,12 @@ function parseHash(h = location.hash) {
     let list = [...new Set(m[2].split(/[.,;\s]+/).map(find).filter((i) => i != null))];
     if (!list.length) return null;
     if (type === "cmp") list = list.slice(0, 4);
-    // Options du face à face, lues avec indulgence : &m=duel|rideau|cote, &s=gris|jour|nuit|studio
+    // Options du face à face, lues avec indulgence : &m=duel|rideau|cote, &s=gris|jour|nuit|teinte (studio, fond teinté)
     let mode = null, studio = null;
     for (const kv of m[3].split(/[&?;]+/)) {
       const [k = "", v = ""] = kv.split("=").map((x) => norm(x.trim()));
       if (/^(m|mode)$/.test(k)) mode = /^du/.test(v) ? "duel" : /^ri|^cu/.test(v) ? "rideau" : /^co|^si|^cote/.test(v) ? "cote" : null;
-      else if (/^(s|studio|decor|fond)$/.test(k)) studio = /^gr|^ne/.test(v) ? "gris" : /^jo|^pl|^da/.test(v) ? "jour" : /^nu|^ni/.test(v) ? "nuit" : /^st|^or/.test(v) ? "studio" : null;
+      else if (/^(s|studio|decor|fond)$/.test(k)) studio = /^gr|^ne/.test(v) ? "gris" : /^jo|^pl|^da/.test(v) ? "jour" : /^nu|^ni/.test(v) ? "nuit" : /^te|^ti/.test(v) ? "studio" : null;
     }
     return { type, list, mode, studio };
   }
