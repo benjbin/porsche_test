@@ -56,3 +56,10 @@ Les noms et codes de teintes viennent du programme Paint to Sample de Porsche : 
 
 - `logo/atelier911-logo-clair.svg` / `-sombre.svg` — la ligne de toit de la 911 (relevée sur la silhouette du rendu) tracée comme un coup de pinceau, au-dessus du logotype « ATELIER 911 » en Poppins (Medium / Light), vectorisé : s'affiche partout sans la police.
 - `logo/atelier911-symbole.svg` — pastille de laque avec la ligne en réserve ; `favicon.svg` en est la version épaissie pour les petites tailles.
+
+## Déploiement Coolify
+
+Le dépôt contient un `Dockerfile` (Nginx alpine) et un `nginx.conf`.
+Dans Coolify : *New Resource → Public/Private Repository* → ce dépôt, branche `main`,
+**Build Pack : Dockerfile**, **Port exposé : 80**, puis renseigner le domaine.
+Healthcheck : `GET /healthz`. Aucune variable d'environnement requise.
