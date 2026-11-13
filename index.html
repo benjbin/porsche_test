@@ -9,15 +9,16 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preload" href="fonts/archivo-latin.woff2?v=t1" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/fragment-mono-latin.woff2?v=t1" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="styles.css?v=t1">
+<link rel="stylesheet" href="styles.css?v=t5">
 </head>
 <body>
 
 <main class="stage" id="stage" aria-label="Showroom : glissez pour changer de teinte">
   <div class="rig" id="rig">
     <img class="shot" id="shotNext" alt="" draggable="false">
+    <img class="shot rim" id="rimNext" alt="" draggable="false" hidden>
     <div class="titles" aria-hidden="true"><div class="title" id="titleNext"></div></div>
-    <div class="wipe" id="wipe"><img class="shot" id="shotCur" alt="" draggable="false" fetchpriority="high"></div>
+    <div class="wipe" id="wipe"><img class="shot" id="shotCur" alt="" draggable="false" fetchpriority="high"><img class="shot rim" id="rimCur" alt="" draggable="false" hidden></div>
     <div class="studio" aria-hidden="true"><i id="studioLight"></i></div>
     <div class="titles" aria-hidden="true"><div class="title" id="titleCur"></div></div>
     <div class="flash" aria-hidden="true"><i id="flashBand"></i></div>
@@ -57,9 +58,18 @@
         <div><dt class="mono">Famille</dt><dd id="specFam"></dd></div>
         <div><dt class="mono">Finition</dt><dd id="specFinish"></dd></div>
       </dl>
+      <div class="rimbar" id="rimBar">
+        <span class="rb-l mono" id="rimLbl">Jantes</span>
+        <div class="rb-sw" id="rimRadios" role="radiogroup" aria-labelledby="rimLbl"></div>
+        <span class="rb-name" id="rimName" aria-hidden="true"></span>
+      </div>
       <span class="fampos" id="specFamPos"></span>
     </div>
     <div class="ctrls">
+      <div class="rim-wrap">
+        <button class="act" id="btnRims" type="button" aria-label="Jantes" aria-haspopup="menu" aria-controls="rimMenu" aria-expanded="false" title="Couleur des jantes"><i class="rim-ic" aria-hidden="true"></i><span class="al">Jantes</span></button>
+        <div class="menu rim-menu" id="rimMenu" role="menu" aria-label="Couleur des jantes"></div>
+      </div>
       <button class="act" id="fav" type="button" aria-pressed="false" aria-label="Ajouter aux favoris" title="Favori (F)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg><span class="al" id="favL">Favori</span></button>
       <div class="menu-wrap">
         <button class="act" id="btnExport" type="button" aria-label="Exporter ou partager" aria-controls="menu" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5M5 14v6h14v-6"/></svg><span class="al">Exporter</span></button>
@@ -145,6 +155,6 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script type="module" src="app.js?v=t2"></script>
+<script type="module" src="app.js?v=t5"></script>
 </body>
 </html>

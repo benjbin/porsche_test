@@ -3064,6 +3064,10 @@ async function exportImage(fmt, c = COLORS[idx]) {
     const o = out.getContext("2d");
     o.imageSmoothingQuality = "high";
     o.drawImage(bg, x, y, w, h);
+    if (rim !== RIM0) {                                        // jantes : calque à la même géométrie que le rendu
+      const ri = await loadImg(rimUrl(bg.width >= 3500 ? 3500 : 2000, rim)).catch(() => null);
+      if (ri) o.drawImage(ri, x, y, w, h);
+    }
 
 
     const g = o.createLinearGradient(0, H * 0.72, 0, H);
@@ -3270,6 +3274,7 @@ function wire() {
   wireNuancier();
   wireLpMenu();
   wireStudio();
+  wireRims();
 
   // Redimensionnement / rotation / changement de densité d'écran : nouvelle taille d'image + titres recalés
   let rt;
@@ -3397,3 +3402,110 @@ async function boot() {
   }
 }
 boot();
+
+/* ---------- Jantes : un calque transparent par finition, posé sur le rendu (même géométrie, au pixel près) ----------
+   Les jantes ne dépendent pas de la teinte : img/{taille}/_rim-{finition}.webp, superposé à #shotCur / #shotNext
+   et recopiant leurs translate / opacity / visibility (le volet et le fondu restent intacts). */
+const RIMS = [
+  { id: "argent", name: "Argent", sw: "#c4c7cc" },
+  { id: "graphite", name: "Graphite", sw: "#4b5057" },
+  { id: "noir", name: "Noir brillant", sw: "#111113" },
+  { id: "noir-mat", name: "Noir satiné", sw: "#232325" },
+  { id: "bronze", name: "Bronze", sw: "#6e5537" },
+  { id: "or", name: "Champagne", sw: "#c4a873" },
+  { id: "blanc", name: "Blanc", sw: "#e9e7e2" },
+];
+const RIM0 = "argent", RIV = "?v=r1";
+const rimUrl = (size, id) => `img/${size}/_rim-${id}.webp${RIV}`;
+let rim = (() => { try { const v = localStorage.getItem("atelier-rim"); return RIMS.some((r) => r.id === v) ? v : RIM0; } catch { return RIM0; } })();
+function rimFor(shot, layer) {
+  const m = /img\/(\d+)\//.exec(shot.getAttribute("src") || "");
+  const want = rim !== RIM0 && m ? rimUrl(m[1], rim) : "";
+  if (!want) { layer.removeAttribute("src"); layer.dataset.want = ""; layer.hidden = true; return; }
+  layer.dataset.want = want;
+  if (layer.getAttribute("src") === want) { layer.hidden = false; return; }
+  load(want).then((ok) => {                                 // remplacée seulement une fois chargée : jamais de trou
+    if (layer.dataset.want !== want) return;
+    if (!ok) { layer.hidden = true; return; }
+    layer.src = want; layer.hidden = false;
+  });
+}
+function mirrorRim(shot, layer) {
+  const s = shot.style, l = layer.style;
+  l.translate = s.translate; l.opacity = s.opacity; l.visibility = s.visibility;
+}
+function setRim(id, { announce = true } = {}) {
+  if (!RIMS.some((r) => r.id === id)) return;
+  rim = id;
+  try { localStorage.setItem("atelier-rim", id); } catch {}
+  syncRimUi();
+  rimFor(shotCur, $("rimCur")); rimFor(shotNext, $("rimNext"));
+  if (announce) toast(`Jantes ${RIMS.find((r) => r.id === id).name.toLowerCase()}`);
+}
+function syncRimUi() {
+  const r = RIMS.find((x) => x.id === rim);
+  $("btnRims")?.style.setProperty("--rim", r.sw);
+  $("btnRims")?.setAttribute("aria-label", `Jantes : ${r.name}`);
+  $("rimMenu")?.querySelectorAll("[data-rim]").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.rim === rim)));
+  $("rimRadios")?.querySelectorAll("[data-rim]").forEach((b) => {
+    const on = b.dataset.rim === rim;
+    b.setAttribute("aria-checked", String(on)); b.tabIndex = on ? 0 : -1;
+  });
+  const nm = $("rimName"); if (nm) nm.textContent = r.name;
+}
+const rimOpen = () => !!$("rimMenu")?.classList.contains("open");
+function closeRimMenu(restoreFocus = true) {
+  const m = $("rimMenu"); if (!m) return;
+  const had = m.contains(document.activeElement);
+  m.classList.remove("open"); $("btnRims")?.setAttribute("aria-expanded", "false");
+  if (had && restoreFocus) $("btnRims")?.focus({ preventScroll: true });
+}
+function wireRims() {
+  const btn = $("btnRims"), menu = $("rimMenu"), wrap = btn?.closest(".rim-wrap");
+  if (!btn || !menu) return;
+  menu.innerHTML = RIMS.map((r) => `<button type="button" role="menuitemradio" data-rim="${r.id}" aria-checked="false"><i class="rim-sw" style="--rim:${r.sw}"></i>${r.name}</button>`).join("");
+  const radios = $("rimRadios");
+  if (radios) {
+    radios.innerHTML = RIMS.map((r) => `<button type="button" role="radio" data-rim="${r.id}" aria-checked="false" aria-label="${r.name}" title="${r.name}"><i class="rim-sw" style="--rim:${r.sw}"></i></button>`).join("");
+    radios.addEventListener("click", (e) => { const b = e.target.closest("[data-rim]"); if (b && b.dataset.rim !== rim) setRim(b.dataset.rim, { announce: false }); });
+    radios.addEventListener("keydown", (e) => {          // flèches : finition suivante (sans faire tourner l'éventail)
+      const d = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+      if (!d) return;
+      e.preventDefault(); e.stopPropagation();
+      const from = e.target.closest?.("[data-rim]")?.dataset.rim ?? rim;
+      const i = (RIMS.findIndex((r) => r.id === from) + d + RIMS.length) % RIMS.length;
+      setRim(RIMS[i].id, { announce: false });
+      radios.querySelector(`[data-rim="${RIMS[i].id}"]`)?.focus({ preventScroll: true });
+    });
+    // survol : le nom de la finition s'affiche en aperçu
+    radios.addEventListener("pointerover", (e) => { const b = e.target.closest("[data-rim]"); if (b && $("rimName")) $("rimName").textContent = RIMS.find((r) => r.id === b.dataset.rim).name; });
+    radios.addEventListener("pointerleave", () => syncRimUi());
+  }
+  syncRimUi();
+  for (const [shot, id] of [[shotCur, "rimCur"], [shotNext, "rimNext"]]) {
+    const layer = $(id);
+    if (!layer) continue;
+    new MutationObserver((ms) => {
+      if (ms.some((m) => m.attributeName === "src")) rimFor(shot, layer);
+      mirrorRim(shot, layer);
+    }).observe(shot, { attributes: true, attributeFilter: ["src", "style"] });
+    rimFor(shot, layer); mirrorRim(shot, layer);
+  }
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (rimOpen()) return closeRimMenu();
+    closeMenu(false); closeFloating();
+    menu.classList.add("open"); btn.setAttribute("aria-expanded", "true");
+    if (e.detail === 0) (menu.querySelector('[aria-checked="true"]') || menu.querySelector("button"))?.focus({ preventScroll: true });
+  });
+  $("btnExport")?.addEventListener("click", () => closeRimMenu(false));
+  menu.addEventListener("keydown", menuKeys);
+  menu.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-rim]"); if (!b) return;
+    closeRimMenu();
+    if (b.dataset.rim !== rim) setRim(b.dataset.rim);
+  });
+  wrap.addEventListener("keydown", (e) => { if (e.key === "Escape" && rimOpen()) { e.preventDefault(); e.stopPropagation(); closeRimMenu(); } });
+  wrap.addEventListener("focusout", (e) => { if (e.relatedTarget && !wrap.contains(e.relatedTarget)) closeRimMenu(false); });
+  document.addEventListener("click", (e) => { if (rimOpen() && !e.target.closest(".rim-wrap")) closeRimMenu(false); });
+}

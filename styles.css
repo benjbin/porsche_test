@@ -199,12 +199,12 @@ svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColo
   letter-spacing: -.01em; font-kerning: normal;
   font-feature-settings: "kern" 1, "liga" 1; font-variant-numeric: lining-nums tabular-nums;
   color: var(--c, var(--title)); translate: var(--tx, 0px) 0; opacity: var(--o, 1); }
-#stage.moving .wipe, #stage.moving #shotCur, #stage.moving #shotNext, #stage.moving .titles { will-change: translate, opacity; }
+#stage.moving .wipe, #stage.moving #shotCur, #stage.moving #shotNext, #stage.moving .rim, #stage.moving .titles { will-change: translate, opacity; }
 
 /* Rendu indisponible : aplat de la teinte dans le volet (il suit le geste), message centré */
 .stage.noimg { background: var(--paint); }   /* (remplace aussi le dégradé) */
 .stage.noimg .wipe { background: var(--paint); }
-.stage.noimg #shotCur { visibility: hidden; }
+.stage.noimg #shotCur, .stage.noimg #rimCur { visibility: hidden !important; }
 .stage.noimg:not(.moving) .wipe + .titles { opacity: 0; }
 .stage.noimg::before { content: attr(data-msg); position: absolute; z-index: 1; left: 0; right: 0; top: 50%;
   margin-top: -8px; height: 16px; padding: 0 var(--gutter); text-align: center; pointer-events: none;
@@ -352,6 +352,31 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 .act:focus-visible { outline-offset: 4px; }
 #fav[aria-pressed="true"] svg { fill: currentColor; }
 .menu-wrap { position: relative; }
+
+/* Jantes : pastille de la finition choisie (reflet en dégradé, pas de flou) + menu de finitions */
+.rim-wrap { position: relative; }
+.rim-ic, .rim-sw { flex: none; display: block; width: 16px; height: 16px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.5), rgba(255,255,255,0) 50%), var(--rim, #c4c7cc);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.28), 0 0 0 1px rgba(0,0,0,.35); }
+.rim-menu { min-width: 208px; }
+/* Rangée de pastilles sous Famille / Finition : choix des jantes toujours visible */
+.rimbar { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+.rb-name { margin-left: 6px; }
+.rb-l { flex: none; width: 56px; color: var(--muted); }   /* largeur entière : pastilles au px entier */
+.rb-sw { display: flex; gap: 2px; margin: -6px 0; }
+.rb-sw button { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; }
+.rb-sw .rim-sw { width: 24px; height: 24px; transition: box-shadow var(--d-micro) var(--e-out); }
+.rb-sw button:hover .rim-sw { box-shadow: inset 0 0 0 1px rgba(255,255,255,.28), 0 0 0 2px var(--ink), 0 0 0 3px var(--line-2); }
+.rb-sw button[aria-checked="true"] .rim-sw { box-shadow: inset 0 0 0 1px rgba(255,255,255,.28), 0 0 0 2px var(--ink), 0 0 0 3px var(--text); }
+.rb-sw button:focus-visible { outline-offset: -2px; }
+.rb-name { font: 400 14px/20px var(--f-ui); letter-spacing: .01em; color: var(--text); white-space: nowrap; }
+.rim-wrap { display: none; }   /* bouton + menu : seulement en paysage téléphone (la rangée n'y tient pas) */
+
+.rim-menu button { justify-content: flex-start; gap: 12px; }
+.rim-menu button::after { content: ""; width: 10px; height: 6px; margin-left: auto; translate: 0 -2px;
+  border: solid currentColor; border-width: 0 0 1.5px 1.5px; rotate: -45deg; opacity: 0; }
+.rim-menu button[aria-checked="true"]::after { opacity: 1; }
+.rim-menu button[aria-checked="true"] .rim-sw { box-shadow: inset 0 0 0 1px rgba(255,255,255,.28), 0 0 0 1px var(--ink-2), 0 0 0 2px var(--text); }
 
 /* Indice de geste : une fois, au-dessus de l'index, s'efface à la première interaction */
 .fan-hint { position: fixed; z-index: 16; left: 0; right: 0; margin: 0 auto; width: fit-content; text-align: center; pointer-events: none; color: var(--muted);
@@ -905,10 +930,15 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   .sp-foot { margin-top: 18px; }
   .sp-foot .sp-rule { margin-right: 40px; }
   .sp-row { flex-direction: column; gap: 0; margin-top: 4px; margin-right: 140px; }
-  .ctrls { position: absolute; right: -10px; bottom: -8px; gap: 0; margin: 0; }
+  .rimbar { gap: 8px; margin-top: 10px; }
+  .rb-sw { gap: 0; }
+  .rb-sw button { width: 36px; height: 40px; }
+  .rb-name { display: none; }
+  .ctrls { position: absolute; right: -10px; bottom: 38px; gap: 0; margin: 0; }   /* au niveau de Famille / Finition : la rangée des jantes est dessous */
   .act { width: 44px; height: 44px; justify-content: center; gap: 0; }
   .act .al { display: none; }
   .act svg { width: 20px; height: 20px; }
+  .rim-ic { width: 20px; height: 20px; }
 
   .panel-head { gap: 12px; padding-bottom: 16px; }
   .panel-head h2 { font-size: 28px; line-height: 36px; order: 1; }
@@ -948,9 +978,12 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   .sp-name .l2:not(:empty)::before { content: " "; }
   .sp-row { display: none; }
   .ctrls { gap: 0; margin: 0 -10px 0 0; }
+  .rimbar { display: none; }
+  .rim-wrap { display: block; }
   .act { width: 44px; height: 44px; justify-content: center; gap: 0; }
   .act .al { display: none; }
   .act svg { width: 20px; height: 20px; }
+  .rim-ic { width: 20px; height: 20px; }
 
   .panel-head { padding-bottom: 12px; }
   .panel-head h2 { font-size: 24px; line-height: 32px; }
@@ -994,7 +1027,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 }
 
 /* Rig réduite par app.js (la voiture laisse la place à l'étiquette) : mêmes bords fondus qu'en portrait */
-.stage.narrow #shotNext, .stage.narrow .wipe { -webkit-mask: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
+.stage.narrow #shotNext, .stage.narrow #rimNext, .stage.narrow .wipe { -webkit-mask: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
   mask: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%); }
 /* Portrait : la rig couvre désormais toute la largeur (app.js) ; les bords ne sont fondus que si elle reste plus étroite (.narrow) */
 
