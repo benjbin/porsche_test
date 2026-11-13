@@ -1,12 +1,43 @@
 /* =========================================================================
-   ATELIER 911 — design system
+   SC 410 — nuancier, design system
    Surfaces pleines, filets de 1px, aucun flou, aucun scale (ni sur le texte,
    ni sur les images, ni ailleurs), aucun texte tourné. Positions et épaisseurs
    en pixels entiers au repos. Texte : 12 px minimum. L'accent est la teinte
    affichée (--paint), écrite par app.js à chaque changement.
-   Le choix de la teinte : « L'Éventail » (152 lames laquées autour d'un pivot
+   Le choix de la teinte : « L'Éventail » (une lame laquée par teinte autour d'un pivot
    sous le bord bas) et « Le Nuancier » (plein écran : tout, recherche, favoris).
    ========================================================================= */
+
+/* ---------- Caractères (auto-hébergés, SIL OFL 1.1 — licences dans fonts/) ----------
+   Archivo (Omnibus-Type), variable graisse 100–900 × chasse 62–125 % : un seul fichier, deux voix.
+     « Archivo »          : chasse normale — interface, texte courant.
+     « Archivo Expanded » : même fichier, chasse figée à 125 % (le navigateur règle l'axe wdth) — logo, nom héros, titres.
+   Fragment Mono (Wei Huang) : données, références, petites capitales techniques.
+   Repli : Arial / Courier New recalés (size-adjust, ascent/descent) pour éviter tout saut de mise en page. */
+@font-face { font-family: "Archivo"; font-style: normal; font-display: swap; font-weight: 100 900; font-stretch: 62% 125%;
+  src: url("fonts/archivo-latin.woff2?v=t1") format("woff2-variations"), url("fonts/archivo-latin.woff2?v=t1") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Archivo"; font-style: normal; font-display: swap; font-weight: 100 900; font-stretch: 62% 125%;
+  src: url("fonts/archivo-latin-ext.woff2?v=t1") format("woff2-variations"), url("fonts/archivo-latin-ext.woff2?v=t1") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Archivo Expanded"; font-style: normal; font-display: swap; font-weight: 100 900; font-stretch: 125%;
+  src: url("fonts/archivo-latin.woff2?v=t1") format("woff2-variations"), url("fonts/archivo-latin.woff2?v=t1") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Archivo Expanded"; font-style: normal; font-display: swap; font-weight: 100 900; font-stretch: 125%;
+  src: url("fonts/archivo-latin-ext.woff2?v=t1") format("woff2-variations"), url("fonts/archivo-latin-ext.woff2?v=t1") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Fragment Mono"; font-style: normal; font-display: swap; font-weight: 400;
+  src: url("fonts/fragment-mono-latin.woff2?v=t1") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Fragment Mono"; font-style: normal; font-display: swap; font-weight: 400;
+  src: url("fonts/fragment-mono-latin-ext.woff2?v=t1") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Archivo Fallback"; src: local("Arial"), local("ArialMT"), local("Liberation Sans");
+  size-adjust: 99%; ascent-override: 88.7%; descent-override: 21.2%; line-gap-override: 0%; }
+@font-face { font-family: "Archivo Expanded Fallback"; src: local("Arial"), local("ArialMT"), local("Liberation Sans");
+  size-adjust: 128%; ascent-override: 68.6%; descent-override: 16.4%; line-gap-override: 0%; }
+@font-face { font-family: "Fragment Mono Fallback"; src: local("Courier New"), local("CourierNewPSMT"), local("Liberation Mono");
+  size-adjust: 103%; ascent-override: 92.2%; descent-override: 24.3%; line-gap-override: 0%; }
 
 :root {
   --ink: #0a0a0b;
@@ -25,14 +56,14 @@
   --title: #426695;
   --r: 0;
 
-  /* Typographie — Poppins partout (500 pour les noms et titres, 300 italique pour les suffixes),
-     DM Mono : les données. */
-  --f-ui: "Poppins", "Helvetica Neue", Arial, sans-serif;
-  --f-display: "Poppins", "Helvetica Neue", Arial, sans-serif;
+  /* Typographie — Archivo (interface), Archivo Expanded (logo, nom héros, titres : la carrosserie large),
+     Fragment Mono (données, références). Contraste par la graisse et la chasse, jamais par l'italique. */
+  --f-ui: "Archivo", "Archivo Fallback", "Helvetica Neue", Arial, sans-serif;
+  --f-display: "Archivo Expanded", "Archivo Expanded Fallback", "Helvetica Neue", Arial, sans-serif;
   --f-title: var(--f-display);
   --f-serif: var(--f-display);
-  --f-mono: "DM Mono", ui-monospace, Menlo, monospace;
-  --track-caps: .12em;
+  --f-mono: "Fragment Mono", "Fragment Mono Fallback", ui-monospace, Menlo, monospace;
+  --track-caps: .1em;
 
   /* Mouvement — miroir des constantes de app.js */
   --e-out: cubic-bezier(.22,1,.36,1);
@@ -90,7 +121,7 @@ html, body { height: 100%; overflow: hidden; background: var(--ink); color: var(
   font: 400 14px/1.4 var(--f-ui); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility; -webkit-tap-highlight-color: transparent;
   font-kerning: normal; font-optical-sizing: auto; font-synthesis: none;
-  font-feature-settings: "kern" 1, "calt" 1; }
+  font-feature-settings: "kern" 1, "calt" 1; font-variant-numeric: lining-nums; }
 button, input, select, textarea { font: inherit; color: inherit; background: none; border: 0; border-radius: var(--r); }
 button { cursor: pointer; }
 button:disabled { cursor: default; }
@@ -125,7 +156,7 @@ svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColo
 /* ---------- Boutons ---------- */
 .btn { position: relative; height: var(--btn); padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   border: 1px solid var(--line-2); border-radius: var(--r); background: rgba(10,10,11,.34);
-  font-weight: 500; font-size: 13px; line-height: 1; letter-spacing: .005em; white-space: nowrap;
+  font-weight: 500; font-size: 13px; line-height: 1; letter-spacing: .01em; white-space: nowrap;
   transition: background-color var(--d-micro) var(--e-out), border-color var(--d-micro) var(--e-out),
     color var(--d-micro) var(--e-out), translate var(--d-micro) var(--e-out); }
 .btn:hover { background: rgba(255,255,255,.06); }
@@ -158,14 +189,15 @@ svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColo
 .shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; -webkit-user-drag: none; }
 /* Volet directionnel : app.js translate .wipe d'un côté et #shotCur de l'autre (le rendu reste immobile à l'écran). */
 .wipe { position: absolute; inset: 0; overflow: hidden; }
-.titles { position: absolute; inset: 0; pointer-events: none;
-  -webkit-mask: url("img/3500/_mask.webp?v=c7") center / cover no-repeat; mask: url("img/3500/_mask.webp?v=c7") center / cover no-repeat; }
+.titles { display: none; }   /* grand nom derrière la voiture retiré */
+.titles-off { position: absolute; inset: 0; pointer-events: none;
+  -webkit-mask: url("img/3500/_mask.webp?v=p1") center / cover no-repeat; mask: url("img/3500/_mask.webp?v=p1") center / cover no-repeat; }
 /* --ty = bas du titre (px depuis le haut de la rig) ; --tx = décalage du geste (px entiers). */
 .title { position: absolute; left: 0; right: 0; margin-inline: auto; width: fit-content;
   top: auto; bottom: calc(100% - var(--ty, 40%));
-  white-space: nowrap; line-height: .94; font-family: var(--f-title); font-weight: 500; font-style: normal;
-  font-optical-sizing: auto; letter-spacing: -.02em; font-kerning: normal;
-  font-feature-settings: "kern" 1, "liga" 1, "lnum" 1; font-variant-numeric: lining-nums proportional-nums;
+  white-space: nowrap; line-height: .94; font-family: var(--f-title); font-weight: 400; font-style: normal;
+  letter-spacing: -.01em; font-kerning: normal;
+  font-feature-settings: "kern" 1, "liga" 1; font-variant-numeric: lining-nums tabular-nums;
   color: var(--c, var(--title)); translate: var(--tx, 0px) 0; opacity: var(--o, 1); }
 #stage.moving .wipe, #stage.moving #shotCur, #stage.moving #shotNext, #stage.moving .titles { will-change: translate, opacity; }
 
@@ -186,7 +218,7 @@ svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColo
   gap: 16px; padding: 0 var(--gutter); text-align: center; color: var(--muted); pointer-events: none;
   transition: opacity var(--d-ui) var(--e-out), visibility 0s linear var(--d-ui); }
 body.ready:not(.boot-error) .boot { opacity: 0; visibility: hidden; }
-body.boot-error .boot { pointer-events: auto; color: var(--text); font: 500 15px/22px var(--f-ui); letter-spacing: -.005em; }
+body.boot-error .boot { pointer-events: auto; color: var(--text); font: 500 15px/22px var(--f-ui); letter-spacing: 0; }
 body.boot-error .boot-line { display: none; }
 .boot-line { position: relative; display: block; width: 120px; height: 1px; background: var(--line); overflow: hidden; }
 .boot-line::after { content: ""; position: absolute; top: 0; left: 0; width: 40px; height: 1px; background: var(--text);
@@ -225,13 +257,16 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   display: flex; align-items: center; gap: 16px; height: 57px; border-bottom: 1px solid var(--frame-c);   /* 56 px + filet : outils au px entier */
   padding: 0 calc(var(--gutter) - var(--fi) - 1px); }
 .mark { margin-right: auto; display: flex; align-items: center; min-width: 0; }
-/* Logo : ligne de toit de la 911 en coup de pinceau + logotype Poppins vectorisé (logo/) */
-.mark .logo { display: block; width: 120px; height: 40px; fill: currentColor; }
+/* Logo : logotype texte « SC 410 » */
+/* Archivo Expanded 600 : capitales larges, interlettrage modéré (la chasse fait déjà le souffle), chiffres tabulaires */
+.mark .logo { display: block; font: 600 15px/20px var(--f-title); letter-spacing: .16em; margin-right: -.16em;
+  color: var(--text); white-space: nowrap; text-transform: uppercase; font-variant-numeric: lining-nums tabular-nums; }
+.mark .logo b { font-weight: 300; }
 .band { position: absolute; left: 50%; top: 20px; width: 320px; margin-left: -160px; text-align: center;
-  color: var(--text); letter-spacing: .24em; white-space: nowrap; pointer-events: none; }
+  color: var(--text); letter-spacing: .22em; white-space: nowrap; pointer-events: none; }
 .tools { display: flex; align-items: center; gap: 0; }   /* 2 × 12 px de remplissage = 24 px entre deux outils, sans séparateur */
 .tool { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px;
-  font: 400 14px/16px var(--f-ui); letter-spacing: .02em; color: var(--text); white-space: nowrap;
+  font: 400 14px/16px var(--f-ui); letter-spacing: .01em; color: var(--text); white-space: nowrap;
   transition: color var(--d-micro) var(--e-out); }
 .tool svg { width: 16px; height: 16px; }
 .tool kbd { font: 400 12px/16px var(--f-mono); color: var(--text); min-width: 12px; text-align: center; }
@@ -259,7 +294,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 
 /* Nº 066 ——— 2S1 */
 .sp-n { display: flex; align-items: center; gap: 12px; height: 16px; }
-.ix { flex: none; display: inline-flex; align-items: center; gap: 6px; color: var(--text); letter-spacing: .12em; }
+.ix { flex: none; display: inline-flex; align-items: center; gap: 6px; color: var(--text); letter-spacing: .08em; }
 .odo { display: inline-flex; letter-spacing: 0; font-variant-numeric: tabular-nums; }
 .dg { display: inline-grid; height: 16px; overflow: hidden; }
 .dg > b { grid-area: 1 / 1; font-weight: 400; line-height: 16px; }
@@ -269,11 +304,12 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 .spec .code:hover { text-decoration-color: currentColor; }
 .spec .code:focus-visible { outline-offset: -8px; }
 
-/* Le nom : Poppins 500, suffixe de finition en italique sur sa propre ligne */
-.sp-name { margin-top: 14px; font: 500 var(--name-size)/1.04 var(--f-display); font-optical-sizing: auto;
-  letter-spacing: -.022em; color: var(--text); font-feature-settings: "kern" 1, "liga" 1, "lnum" 1; overflow-wrap: normal; }
+/* Le nom : Archivo Expanded 400 (chiffres tabulaires, alignés), suffixe de finition en 200 sur sa propre ligne */
+.sp-name { margin-top: 14px; font: 400 var(--name-size)/1.04 var(--f-display);
+  letter-spacing: -.01em; color: var(--text); font-feature-settings: "kern" 1, "liga" 1; font-variant-numeric: lining-nums tabular-nums;
+  overflow-wrap: normal; }
 .sp-name .l1, .sp-name .l2 { display: block; }
-.sp-name .l2 { font-style: italic; font-weight: 300; letter-spacing: -.01em; }
+.sp-name .l2 { font-style: normal; font-weight: 200; letter-spacing: -.01em; }
 .sp-name .l2:empty { display: none; }
 /* Chaque mot dans une fente : la révélation monte de dessous (app.js) */
 .w { display: inline-block; vertical-align: top; overflow: hidden; padding: .1em .04em .16em; margin: -.1em -.04em -.16em; }
@@ -297,7 +333,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 .sp-row { display: flex; gap: 28px; margin-top: 18px; }
 .sp-row > div { display: flex; align-items: baseline; gap: 10px; min-width: 0; white-space: nowrap; }
 .sp-row dt { color: var(--muted); }
-.sp-row dd { font: 400 14px/20px var(--f-ui); letter-spacing: .005em; color: var(--text); }
+.sp-row dd { font: 400 14px/20px var(--f-ui); letter-spacing: .01em; color: var(--text); }
 .spec .fampos { display: none; }
 
 /* Changement : le nom sort vers le haut ; données en fondu ; le compteur et la perle restent */
@@ -309,7 +345,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 /* Actions en texte, sur la ligne de base de l'étiquette */
 .ctrls { flex: none; display: flex; gap: 24px; align-items: center; margin-bottom: -10px; }
 .act { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 40px;
-  font: 400 13px/16px var(--f-ui); letter-spacing: .02em; color: var(--text); white-space: nowrap; }
+  font: 400 13px/16px var(--f-ui); letter-spacing: .01em; color: var(--text); white-space: nowrap; }
 .act svg { width: 16px; height: 16px; }
 .act .al { text-decoration: underline 1px transparent; text-underline-offset: 5px; transition: text-decoration-color var(--d-micro) var(--e-out); }
 .act:hover .al, .act[aria-expanded="true"] .al { text-decoration-color: currentColor; }
@@ -334,7 +370,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   transition: opacity var(--d-micro) var(--e-in), translate var(--d-micro) var(--e-in), visibility 0s linear var(--d-micro); }
 .menu.open { opacity: 1; visibility: visible; translate: none;
   transition: opacity var(--d-ui) var(--e-out), translate var(--d-ui) var(--e-out), visibility 0s; }
-#menu::before { content: "Exporter"; font: 400 12px/16px var(--f-mono); letter-spacing: .14em; text-transform: uppercase;
+#menu::before { content: "Exporter"; font: 400 12px/16px var(--f-mono); letter-spacing: var(--track-caps); text-transform: uppercase;
   color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 .menu button { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 40px; padding: 0 12px;
   text-align: left; font-size: 13px; line-height: 16px; font-weight: 500; transition: background-color var(--d-micro) var(--e-out); }
@@ -349,7 +385,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 .lp-menu button { min-height: 44px; justify-content: flex-start; gap: 12px; }
 .lp-menu button svg { width: 16px; height: 16px; }
 .lp-head { display: flex; align-items: center; gap: 12px; padding: 8px 12px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--line);
-  font: 500 18px/24px var(--f-display); min-width: 0; }
+  font: 400 16px/24px var(--f-display); letter-spacing: -.005em; min-width: 0; }
 .lp-head i { flex: none; width: 16px; height: 24px; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
 .lp-head span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -438,7 +474,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 /* Familles : petites capitales droites, posées au pixel entier sur l'arc par app.js */
 .fan-fams { position: absolute; z-index: 2; inset: 0; pointer-events: none; }
 .fan-fam { position: absolute; left: 0; top: 0; height: var(--fan-lh); padding: 0 1px; pointer-events: auto;
-  font: 500 12px/var(--fan-lh) var(--f-ui); letter-spacing: .14em; text-transform: uppercase; white-space: nowrap;
+  font: 500 12px/var(--fan-lh) var(--f-ui); letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
   color: var(--muted); transition: color var(--d-micro) var(--e-out); }   /* plein, sans opacité : ≥ 3:1 */
 .fan-fam::before { content: ""; position: absolute; inset: -12px -8px; }       /* zone de toucher */
 .fan-fam.cur, .fan-fam:hover { color: var(--text); }
@@ -468,22 +504,22 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   padding: var(--pad-t) var(--pad-r) 24px var(--pad-l); border-bottom: 1px solid var(--line);
   translate: 0 -8px; transition: translate var(--d-ui) var(--e-in); }
 .panel.open .panel-head { translate: none; transition: translate var(--d-panel) var(--e-out); }
-.panel-head h2 { font: 500 40px/48px var(--f-serif); letter-spacing: -.02em; margin-right: auto; text-wrap: balance;
+.panel-head h2 { font: 400 36px/44px var(--f-serif); letter-spacing: -.015em; margin-right: auto; text-wrap: balance;
   display: flex; align-items: baseline; gap: 16px; min-width: 0; }
-.panel-head h2 em { font-style: italic; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+.panel-head h2 em { font-style: normal; font-weight: 200; color: var(--muted); letter-spacing: 0; }
 
 /* ---------- « Le Nuancier » : fondu + montée de 16 px (opacité / translation seulement) ---------- */
 .panel.nu { translate: 0 16px; transition: opacity var(--d-ui) var(--e-in), translate var(--d-ui) var(--e-in), visibility 0s linear var(--d-ui); }
 .panel.nu.open { translate: none; transition: opacity var(--d-panel) var(--e-expo), translate var(--d-panel) var(--e-expo), visibility 0s; }
 .nu .panel-head, .panel.nu.open .panel-head { translate: none; }
 .nu-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 20px 24px; padding-bottom: 20px; }
-.nu-head h2 { font: italic 300 56px/60px var(--f-serif); letter-spacing: -.02em; margin: 0; }
+.nu-head h2 { font: 300 48px/56px var(--f-serif); letter-spacing: -.02em; margin: 0; }
 .nu-tools { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px 24px; flex-wrap: wrap; min-width: 0; }
 .nu-search { flex: 1 1 360px; max-width: 620px; min-width: 0; display: flex; align-items: center; gap: 12px; height: 52px;
   border-bottom: 1px solid var(--line-2); color: var(--muted); transition: border-color var(--d-micro) var(--e-out); cursor: text; }
 .nu-search:focus-within { border-color: var(--text); color: var(--text); }
 .nu-search svg { width: 20px; height: 20px; }
-.nu-search input { flex: 1 1 auto; min-width: 0; height: 100%; font: 400 20px/28px var(--f-ui); letter-spacing: -.01em;
+.nu-search input { flex: 1 1 auto; min-width: 0; height: 100%; font: 400 20px/28px var(--f-ui); letter-spacing: 0;
   color: var(--text); outline: none; }
 .nu-search input::placeholder { color: var(--faint); }
 .nu-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
@@ -504,7 +540,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
 .nu-sec { padding-top: 32px; }
 .nu-sec h3 { display: flex; align-items: baseline; gap: 14px; margin-bottom: 20px;
-  font: 500 40px/48px var(--f-serif); letter-spacing: -.02em; }
+  font: 400 32px/40px var(--f-serif); letter-spacing: -.015em; }
 .nu-sec h3 small { color: var(--muted); }
 .nu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--nu-min, 300px), 1fr)); gap: 32px 20px; }
 .nu-tile { position: relative; display: flex; flex-direction: column; text-align: left; min-width: 0; scroll-margin: 24px 0; }
@@ -515,7 +551,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 .nu-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .nu-name { display: flex; align-items: center; gap: 8px; margin-top: 12px; min-width: 0; }
 .nu-name .lq { flex: none; width: 8px; height: 14px; border-radius: 1px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); --sp: 30%; --dk: 30%; }
-.nu-name b { min-width: 0; font: 500 14px/20px var(--f-ui); letter-spacing: -.005em; color: var(--text);
+.nu-name b { min-width: 0; font: 500 14px/20px var(--f-ui); letter-spacing: .005em; font-variant-numeric: lining-nums tabular-nums; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nu-tile > .mono { margin-top: 2px; padding-left: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nu-fav { position: absolute; z-index: 1; top: 6px; right: 6px; width: 24px; height: 24px; display: grid; place-items: center;
@@ -533,7 +569,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   font: 400 12px/16px var(--f-mono); letter-spacing: .08em; background: var(--ink); color: var(--text); }
 .nu-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 40vh;
   text-align: center; color: var(--muted); font: 400 16px/24px var(--f-ui); padding: 32px 0; }
-.nu-empty p { color: var(--text); font: italic 300 28px/36px var(--f-serif); max-width: 100%; overflow-wrap: anywhere; }
+.nu-empty p { color: var(--text); font: 300 24px/32px var(--f-serif); max-width: 100%; overflow-wrap: anywhere; }
 .nu-empty small { font: 400 13px/20px var(--f-ui); }
 .nu-empty .btn { margin-top: 8px; color: var(--text); }
 
@@ -545,7 +581,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 .cx-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px 32px;
   padding: calc(var(--fi) + 16px) var(--pad-r) 16px var(--pad-l); border-bottom: 1px solid var(--line); }
 .cx-head h2 { font: 500 32px/40px var(--f-display); letter-spacing: -.02em; white-space: nowrap; }
-.cx-head h2 em { font-style: italic; font-weight: 300; color: var(--muted); letter-spacing: 0; }
+.cx-head h2 em { font-style: normal; font-weight: 200; color: var(--muted); letter-spacing: 0; }
 .cx-bar { display: flex; align-items: center; gap: 12px; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 2px; margin: -2px; }
 .cx-bar::-webkit-scrollbar { display: none; }
 /* Débordement horizontal : fondu du bord où il reste du contenu (--fl / --fr écrits par app.js) */
@@ -612,7 +648,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 .cx-meta { padding-top: 14px; }
 .cx-id { display: flex; align-items: center; gap: 12px; height: 28px; min-width: 0; }
 .cx-nm { min-width: 0; font: 500 18px/28px var(--f-display); letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cx-nm em, .cx-rlab em, .cx-vtxt h3 em { font-style: italic; font-weight: 300; letter-spacing: 0; }
+.cx-nm em, .cx-rlab em, .cx-vtxt h3 em { font-style: normal; font-weight: 200; letter-spacing: 0; }
 .cx-id .mono { margin-left: auto; flex: none; color: var(--muted); }
 .cx-rep { margin-top: 10px; border-top: 1px solid var(--line); }
 .cx-rep > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 30px; border-bottom: 1px solid var(--line); min-width: 0; }
@@ -627,7 +663,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 .cx-q dd { display: block; height: 40px; white-space: normal; line-height: 20px; overflow: hidden; color: var(--text); }
 .cx-duel-h { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 8px 20px; flex-wrap: wrap; }
 .cx-duel-h p { font: 500 24px/32px var(--f-display); letter-spacing: -.01em; }
-.cx-duel-h p span { font-style: italic; font-weight: 300; color: var(--muted); }
+.cx-duel-h p span { font-style: normal; font-weight: 200; color: var(--muted); }
 .cx-duel-h .mono { color: var(--muted); }
 .cx-grid.duel .cx-cell { cursor: pointer; }
 .cx-grid.duel .cx-car { transition: box-shadow var(--d-micro) var(--e-out); }
@@ -821,20 +857,28 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   .cx-seg button[aria-pressed="true"], .cx-chip[aria-pressed="true"] { outline: 2px solid Highlight; }
 }
 
-/* ---------- Toast ---------- */
+/* ---------- Toast : pilule sombre, pastille de la teinte, action en capitales mono ---------- */
 .toast { position: fixed; z-index: 90; left: 0; right: 0; margin: 0 auto; width: fit-content;
-  max-width: calc(100% - 2 * var(--gutter)); top: calc(var(--fi) + 72px);
-  display: flex; align-items: center; gap: 12px;
-  background: var(--paper); color: var(--paper-ink); padding: 12px 16px; border-left: 0; border-radius: var(--r);
-  font-weight: 500; font-size: 13px; line-height: 20px; letter-spacing: -.003em; white-space: nowrap; overflow: hidden;
-  opacity: 0; transition: opacity var(--d-ui) var(--e-out); pointer-events: none; }
-.toast::before { content: ""; flex: none; width: 12px; height: 12px; background: var(--paint); box-shadow: inset 0 0 0 1px rgba(20,20,20,.2); }
-.toast.show { opacity: 1; pointer-events: auto; }
+  max-width: calc(100% - 2 * var(--gutter)); top: calc(var(--fi) + 72px); height: 44px;
+  display: flex; align-items: center; gap: 12px; padding: 0 20px 0 12px; border-radius: 22px;
+  background: rgba(14,14,16,.92); color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), inset 0 1px 0 rgba(255,255,255,.08), 0 12px 32px rgba(0,0,0,.36);
+  font-weight: 400; font-size: 13px; line-height: 20px; letter-spacing: .01em; white-space: nowrap; overflow: hidden;
+  opacity: 0; translate: 0 -8px; pointer-events: none;
+  transition: opacity var(--d-ui) var(--e-out), translate var(--d-ui) var(--e-out); }
+/* pastille : bille de la teinte (même lumière que la bille de la fiche) */
+.toast::before { content: ""; flex: none; width: 20px; height: 20px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), rgba(255,255,255,0) 45%), var(--paint);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.18), inset 0 -3px 5px rgba(0,0,0,.35); }
+.toast.show { opacity: 1; translate: 0 0; pointer-events: auto; }
 .toast > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.toast button { flex: none; margin: -12px -8px -12px 4px; padding: 12px 8px; font-weight: 500; color: var(--paper-ink);
-  text-decoration: underline 1px; text-underline-offset: 3px; }
-.toast button:hover { text-decoration-thickness: 2px; }
-.toast button:focus-visible { outline-color: var(--paper-ink); outline-offset: -6px; }
+.toast button { flex: none; position: relative; height: 44px; margin: 0 -20px 0 4px; padding: 0 20px 0 17px;
+  font: 400 12px/44px var(--f-mono); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--text);
+  border-radius: 0 22px 22px 0; transition: background var(--d-ui) var(--e-out); }
+.toast button::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 1px; background: rgba(255,255,255,.16); }
+.toast button:hover { background: rgba(255,255,255,.06); }
+.toast button:focus-visible { outline: 1px solid var(--text); outline-offset: -4px; }
+@media (prefers-reduced-motion: reduce) { .toast { translate: none; transition: opacity var(--d-ui) linear; } }
 
 /* ---------- Toucher : cibles ≥ 44px ---------- */
 @media (pointer: coarse), (max-width: 640px) {
@@ -867,12 +911,12 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   .act svg { width: 20px; height: 20px; }
 
   .panel-head { gap: 12px; padding-bottom: 16px; }
-  .panel-head h2 { font-size: 30px; line-height: 38px; order: 1; }
+  .panel-head h2 { font-size: 28px; line-height: 36px; order: 1; }
   .panel-head > .btn.sq:last-child { order: 2; }
 
   .nu-head { gap: 12px 16px; padding-bottom: 16px; }
   .nu-head > h2, .nu-head > .btn { order: 0; }
-  .nu-head h2 { font-size: 36px; line-height: 44px; }
+  .nu-head h2 { font-size: 32px; line-height: 40px; }
   .nu-tools { gap: 12px; }
   .nu-search { flex-basis: 100%; height: 48px; }
   .nu-search input { font-size: 20px; }
@@ -881,7 +925,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   .nu-count { display: none; }
   .nu-share { margin-left: 0; }
   .nu-sec { padding-top: 24px; }
-  .nu-sec h3 { font-size: 32px; line-height: 40px; margin-bottom: 14px; }
+  .nu-sec h3 { font-size: 24px; line-height: 32px; margin-bottom: 14px; }
   .nu-grid { --nu-min: 150px; gap: 20px 12px; }
   .fc-img { width: 180px; height: 72px; }
   .fc-txt { width: 180px; }
@@ -891,7 +935,7 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
 @media (max-height: 500px) and (orientation: landscape) {
   .crops { display: none; }
   .top { height: 45px; }   /* 44 px + filet */
-  .mark .logo { width: 96px; height: 32px; }
+  .mark .logo { font-size: 13px; }
   .dock-row { align-items: flex-end; gap: 16px; }
   .spec { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 12px; width: min(52vw, 440px); }
   .sp-foot { grid-column: 1; grid-row: 1 / span 2; align-self: center; height: 28px; margin: 0; }
@@ -909,16 +953,16 @@ body.intro .fan { animation: intro-fade 400ms var(--e-out) 300ms both; }   /* le
   .act svg { width: 20px; height: 20px; }
 
   .panel-head { padding-bottom: 12px; }
-  .panel-head h2 { font-size: 28px; line-height: 36px; }
+  .panel-head h2 { font-size: 24px; line-height: 32px; }
   .nu-head { gap: 8px 16px; }
-  .nu-head h2 { font-size: 28px; line-height: 36px; }
+  .nu-head h2 { font-size: 24px; line-height: 32px; }
   .nu-search { height: 44px; flex-basis: 280px; }
   .nu-search input { font-size: 18px; }
   .nu-sec { padding-top: 16px; }
   .nu-grid { --nu-min: 220px; gap: 20px 16px; }
   .fc-img { width: 180px; height: 72px; }
   .fc-txt { width: 180px; }
-  .nu-sec h3 { font-size: 28px; line-height: 36px; margin-bottom: 12px; }
+  .nu-sec h3 { font-size: 22px; line-height: 28px; margin-bottom: 12px; }
 }
 
 /* ---------- Mouvement réduit : rotations en saut, pas de vague animée ---------- */
@@ -963,12 +1007,12 @@ body.bg-light .stage::after { background: linear-gradient(180deg, transparent 0,
 /* ---------- Éclat de laque (borné à la carrosserie : masque de silhouette inversé) et lumière de studio ---------- */
 .flash, .studio { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .flash {
-  -webkit-mask: linear-gradient(#000 0 0), url("img/3500/_mask.webp?v=c7") center / cover no-repeat; -webkit-mask-composite: xor;
-          mask: linear-gradient(#000 0 0), url("img/3500/_mask.webp?v=c7") center / cover no-repeat; mask-composite: exclude; }
+  -webkit-mask: linear-gradient(#000 0 0), url("img/3500/_mask.webp?v=p1") center / cover no-repeat; -webkit-mask-composite: xor;
+          mask: linear-gradient(#000 0 0), url("img/3500/_mask.webp?v=p1") center / cover no-repeat; mask-composite: exclude; }
 .flash i { position: absolute; top: 0; bottom: 0; left: 0; width: 18%; opacity: 0; translate: -100% 0;
   background: linear-gradient(100deg, transparent 0, rgb(255 255 255 / .1) 28%, rgb(255 255 255 / .35) 50%, rgb(255 255 255 / .1) 72%, transparent 100%); }
 /* Lumière de studio : derrière la voiture (même masque que le titre), suit le pointeur (app.js, px entiers) */
-.studio { -webkit-mask: url("img/3500/_mask.webp?v=c7") center / cover no-repeat; mask: url("img/3500/_mask.webp?v=c7") center / cover no-repeat; }
+.studio { -webkit-mask: url("img/3500/_mask.webp?v=p1") center / cover no-repeat; mask: url("img/3500/_mask.webp?v=p1") center / cover no-repeat; }
 .studio i { position: absolute; left: -700px; top: -700px; width: 1400px; height: 1400px; border-radius: 50%; opacity: 0;
   background: radial-gradient(closest-side, rgb(255 255 255 / .06), rgb(255 255 255 / .03) 45%, rgb(255 255 255 / 0));
   transition: opacity 600ms var(--e-out); }
@@ -976,3 +1020,12 @@ body.lit .studio i { opacity: 1; }
 .stage.noimg .flash, .stage.noimg .studio { display: none; }
 @media (pointer: coarse), (prefers-reduced-motion: reduce) { .studio { display: none; } }
 @media (prefers-reduced-motion: reduce) { .flash { display: none; } }
+
+/* ---------- Noms PANTONE ----------
+   « PANTONE 7401 C » : le numéro est le héros, la lettre de support (C) suit sur la même ligne en maigre droit ;
+   la mention PANTONE est portée par la ligne mono (code de l'étiquette, carte, vignettes). */
+.sp-name.pt .l1, .sp-name.pt .l2 { display: inline; }
+.sp-name.pt .l2:not(:empty)::before { content: " "; }
+.sp-name.pt .l2 { font-style: normal; font-weight: 200; letter-spacing: -.01em; }
+.nu-name b em { font-style: normal; font-weight: 300; letter-spacing: 0; }
+em.sfx, .nu-name b em.sfx, .cx-vtxt h3 em.sfx { font-style: normal; font-weight: 200; }

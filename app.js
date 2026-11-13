@@ -1,6 +1,6 @@
-// Atelier 911 — showroom (comportement).
+// SC 410 — nuancier (comportement).
 // 1 rendu par teinte + 1 masque alpha : le nom passe derrière la voiture.
-// Choix de la teinte : « L'Éventail », 152 lames laquées autour d'un pivot sous le bord bas ;
+// Choix de la teinte : « L'Éventail », une lame laquée par teinte de colors.json, autour d'un pivot sous le bord bas ;
 // « Le Nuancier » (plein écran) réunit toutes les teintes, la recherche et les favoris.
 // Règle unique : la lame au repos sous l'index (en haut, au centre) est la teinte de la voiture.
 // Netteté : la « rig » est dimensionnée (pas de transform: scale), le texte n'est jamais rastérisé
@@ -12,26 +12,44 @@ const IMG_W = 3500, IMG_H = 5000;
 // hauteur du rendu, au centre) de sorte que ~72 % de la hauteur de capitale reste au-dessus de la ligne de toit.
 const ROOF = 0.452;
 const T_CLEAR = 0.72;                  // part de la hauteur de capitale visible au-dessus du toit
-const P_CAP = 0.7, P_ASC = 1.05, P_DSC = 0.35;   // Poppins : capitale, ascendante, descendante (em)
+const P_CAP = 0.686, P_ASC = 0.878, P_DSC = 0.21;   // Archivo : capitale, ascendante, descendante (em)
 // Bas de la boîte du titre (line-height lh) pour un rendu de hauteur ih dont le haut est à top
 const titleBottom = (top, ih, size, lh) => top + ih * ROOF + (1 - T_CLEAR) * P_CAP * size + lh / 2 - ((P_ASC - P_DSC) / 2) * size;
 const SIZES = [1200, 2000, 3500];
-const IV = "?v=c7";                  // version des rendus : change à chaque régénération (cache navigateur)
+const IV = "?v=p2";                  // version des rendus : change à chaque régénération (cache navigateur)
 const NEXT_WAIT = 4000;                // attente max du rendu cible avant de passer en aplat
 const SWAP_OUT = 260;                  // sortie du nom de l'étiquette (.spec.swap : 240 ms + marge)
 const D = { micro: 140, ui: 220, panel: 360, paint: 560, ambient: 900 };   // miroir des tokens CSS
+// Face à face (comparateur) retiré de l'interface : code conservé mais inatteignable (bouton, touche C, menu
+// d'une lame, nuancier, liens #cmp= qui retombent sur la vue normale). Repasser à true pour le réactiver.
+const COMPARE = false;
 const NOIMG_MSG = "Rendu indisponible — aperçu en aplat";
-const FAMILY_ORDER = ["blanc", "gris", "noir", "brun", "rouge", "orange", "jaune", "vert", "bleu", "violet"];
+// Familles pilotées par les données : ordre et libellés connus ci-dessous ; une clé inconnue de colors.json
+// est ajoutée à la fin (libellé dérivé de la clé) au chargement ; seules les familles présentes sont affichées.
+const FAMILY_ORDER = ["blanc", "gris", "noir", "beige", "brun", "rouge", "rose", "orange", "jaune", "vert", "bleu", "violet"];
 const FAMILIES = [                     // [clé, libellé FR, singulier FR]
-  ["blanc", "Blancs", "Blanc"], ["gris", "Gris", "Gris"], ["noir", "Noirs", "Noir"], ["brun", "Bruns", "Brun"],
-  ["rouge", "Rouges", "Rouge"], ["orange", "Oranges", "Orange"], ["jaune", "Jaunes", "Jaune"],
-  ["vert", "Verts", "Vert"], ["bleu", "Bleus", "Bleu"], ["violet", "Violets", "Violet"],
+  ["blanc", "Blancs", "Blanc"], ["gris", "Gris", "Gris"], ["noir", "Noirs", "Noir"], ["beige", "Beiges", "Beige"],
+  ["brun", "Bruns", "Brun"], ["rouge", "Rouges", "Rouge"], ["rose", "Roses", "Rose"], ["orange", "Oranges", "Orange"],
+  ["jaune", "Jaunes", "Jaune"], ["vert", "Verts", "Vert"], ["bleu", "Bleus", "Bleu"], ["violet", "Violets", "Violet"],
 ];
 const FAM_EN = {
   vert: ["green"], bleu: ["blue"], rouge: ["red"], gris: ["grey", "gray"], noir: ["black"], blanc: ["white"],
-  jaune: ["yellow"], orange: ["orange"], violet: ["purple", "violet"], brun: ["brown"],
+  jaune: ["yellow"], orange: ["orange"], violet: ["purple", "violet"], brun: ["brown"], rose: ["pink", "rose"],
+  beige: ["beige", "tan", "sand"],
 };
+const NEUTRALS = new Set(["blanc", "gris", "noir"]);   // rangés du clair au foncé (les autres : par teinte)
 const famLabel = (k) => FAMILIES.find((f) => f[0] === k)?.[1] ?? "";
+// Clé de famille normalisée (« Rose », « roses » → « rose ») ; une clé inconnue reçoit un libellé à la volée
+function famKey(raw) {
+  const k = norm(String(raw ?? "").trim()).replace(/\s+/g, "-");
+  if (!k) return "gris";
+  const hit = FAMILY_ORDER.find((f) => f === k || f + "s" === k) ?? Object.keys(FAM_EN).find((f) => FAM_EN[f].includes(k));
+  if (hit) return hit;
+  const cap = k.charAt(0).toUpperCase() + k.slice(1).replace(/-/g, " ");
+  FAMILY_ORDER.push(k);
+  FAMILIES.push([k, /[sxz]$/.test(cap) ? cap : cap + "s", cap]);
+  return k;
+}
 const HEART = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>';
 const ICON_CMP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 7h4v10H5zM15 7h4v10h-4z"/></svg>';
 const ICON_COPY = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11"/><path d="M5 15V5h10"/></svg>';
@@ -46,11 +64,30 @@ const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 const coarse = matchMedia("(pointer: coarse)");
 const fine = matchMedia("(pointer: fine)");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const heroName = (name) => name.replace(/\s*\(.*?\)/g, "").replace(/\s+Metallic$/i, "").trim() || name;
+// Noms. Pantone : « PANTONE 7401 C » → héros « 7401 C » (la mention PANTONE est portée à part, en petit) ;
+// ancien format : « Viridian Snow Metallic » → « Viridian Snow » (la finition est dite ailleurs).
+const PANTONE = /^pantone\s+/i;
+const isPantone = (c) => PANTONE.test(c.name);
+const heroName = (name) => PANTONE.test(name) ? name.replace(PANTONE, "").trim() || name
+  : name.replace(/\s*\(.*?\)/g, "").replace(/\s+Metallic$/i, "").trim() || name;
+const squash = (s) => norm(String(s)).replace(/[^a-z0-9]/g, "");
+// Le code n'est montré que s'il apporte quelque chose : « 7401 » dans « 7401 C » est redondant, « 10442-G » non
+const codeRedundant = (c) => { const h = heroName(c.name), k = squash(c.code); return !!k && (squash(h).startsWith(k) || h.split(/\s+/).some((w) => squash(w) === k)); };
+// Mention secondaire (police mono) : « PANTONE », « PANTONE · 10442-G », ou le code (ancien format)
+const tagOf = (c) => isPantone(c) ? (codeRedundant(c) ? "PANTONE" : `PANTONE · ${c.code}`) : c.code;
+// Nom complet pour les lecteurs d'écran, le titre de page, le partage : sans répéter le code s'il est dans le nom
+const spoken = (c) => codeRedundant(c) ? c.name : `${c.name}, ${c.code}`;
+// Ce que « copier » met dans le presse-papiers : la référence complète (Pantone) ou le code
+const refOf = (c) => isPantone(c) ? (codeRedundant(c) ? c.name : `${c.name} (${c.code})`) : c.code;
+// Codes dans les URL et les identifiants : espaces → tirets ; recherche insensible à la casse
+const slug = (code) => String(code).trim().replace(/\s+/g, "-");
+const ckey = (code) => slug(code).toUpperCase();
+const cid = (c) => slug(c.code).replace(/[^A-Za-z0-9_-]/g, "_");
 const isOpen = (id) => !!$(id)?.classList.contains("open");
 const anyPanel = () => document.querySelector(".panel.open");
 const plural = (n, w) => `${n} ${w}${n > 1 ? "s" : ""}`;
-const metal = (c) => (/metallic/i.test(c.name) ? 1 : 0);
+// Finition : champ metal de colors.json (0/1) ; à défaut, le nom (« … Metallic »)
+const metal = (c) => (c.metal != null && c.metal !== "" ? (Number(c.metal) || c.metal === true ? 1 : 0) : /metallic/i.test(c.name) ? 1 : 0);
 
 /* ---------- Courbes (miroir de --e-out / --e-inout / --e-in) ---------- */
 
@@ -269,7 +306,7 @@ function titleColor(hex, band = null) {
 
 // Ordre du nuancier : par famille (blancs → violets) ; neutres du clair au foncé, couleurs par teinte
 function deckOrder(list) {
-  const neutral = (f) => f === "blanc" || f === "gris" || f === "noir";
+  const neutral = (f) => NEUTRALS.has(f);
   const key = (c) => {
     const [h, , l] = hsl(c.hex);
     return neutral(c.family) ? [1 - lstar(rgbOf(c.hex)), 0] : [(h + 345) % 360, -l];
@@ -362,7 +399,7 @@ function imgUrl(code) {
   const k = Math.max((geo.sw * geo.z) / IMG_W, (geo.sh * geo.z) / IMG_H);
   const need = IMG_W * k * geo.dpr;
   const w = SIZES.find((s) => s >= need) ?? SIZES[SIZES.length - 1];
-  return `img/${w}/${code}.webp${IV}`;
+  return `img/${w}/${encodeURIComponent(code)}.webp${IV}`;
 }
 
 // decode() peut ne jamais se résoudre (onglet/vue non rendu) : attente bornée, jamais bloquante.
@@ -387,7 +424,7 @@ function load(url) {
 async function loadAny(code, url) {
   if (await load(url)) return url;
   for (const s of [...SIZES].reverse()) {
-    const u = `img/${s}/${code}.webp${IV}`;
+    const u = `img/${s}/${encodeURIComponent(code)}.webp${IV}`;
     if (u !== url && (await load(u))) return u;
   }
   return null;
@@ -419,7 +456,7 @@ function setImg(el, c) {
       el.src = got;
       el.dataset.src = got === url ? url : "";                // une version de secours sera re-tentée plus tard
       el.dataset.code = c.code;
-      el.alt = el === shotCur ? `Porsche 911 en ${c.name}` : "";
+      el.alt = el === shotCur ? `Voiture en ${spoken(c)}` : "";
       await decoded(el);
       if (el.dataset.want !== url) return false;
       el.style.visibility = "";
@@ -499,7 +536,7 @@ function metrics(c, el) {
   let size = titleSize(geo.sh, carFit.ts || 1);
   set(size);
   let w = el.getBoundingClientRect().width;
-  // Poppins : on mesure le rendu réel et on recale jusqu'à tenir
+  // Archivo Expanded : on mesure le rendu réel et on recale jusqu'à tenir
   for (let k = 0; k < 4 && w > maxW && size > 1; k++) {
     size = Math.max(1, Math.min(size - 1, Math.floor((size * maxW) / w)));
     set(size);
@@ -584,12 +621,26 @@ function peek(c) {
 }
 
 /* ---------- L'étiquette (.spec) ----------
-   Nº + compteur à rouleaux, nom en Poppins (suffixe de finition en italique, ligne 2), filet + perle de laque,
+   Nº + compteur à rouleaux, nom en Archivo Expanded (suffixe de finition en maigre, ligne 2), filet + perle de laque,
    Famille / Finition. Pendant un changement : le nom sort (.swap), puis au calage le compteur roule et le nom
    se révèle mot à mot. Une nouvelle demande annule tout ce qui est en vol : l'état final est toujours exact. */
 
 const SUFFIX = /\s+((?:Metallic|Pearl|Matte?|Satin)(?:\s*\([^)]*\))?)$/i;   // « Metallic », « Metallic (964) »
-const splitName = (name) => { const m = name.match(SUFFIX); return m ? [name.slice(0, m.index), m[1]] : [name, ""]; };
+// Pantone : « PANTONE 7401 C » → ["7401", "C"] (lettre de support en maigre, sur la même ligne) ; sinon nom + finition
+const PT_SUFFIX = /\s+([A-Z]{1,3})$/;                                       // C, U, CP, XGC…
+// « 10441 C · vernis brillant » : la mention de vernis passe en ligne 2 (maigre), jamais de « · » orphelin en fin de ligne
+const PT_DESC = /^(.+?\s[A-Z]{1,3})(?:\s+·)?\s+(\p{Ll}.*)$/u;
+const ptDesc = (name) => PANTONE.test(name) && PT_DESC.test(heroName(name));
+const splitName = (name) => {
+  if (PANTONE.test(name)) {
+    const h = heroName(name), d = h.match(PT_DESC);
+    if (d) return [d[1], d[2]];
+    const m = h.match(PT_SUFFIX); return m && m.index ? [h.slice(0, m.index), m[1]] : [h, ""];
+  }
+  const m = name.match(SUFFIX); return m ? [name.slice(0, m.index), m[1]] : [name, ""];
+};
+// Nom en HTML (face à face) : suffixe en <em> ; pour Pantone, lettre de support en maigre droit (.sfx)
+const nameHTML = (name) => { const [a, b] = splitName(name); return esc(a) + (b ? ` <em${PANTONE.test(name) ? ' class="sfx"' : ""}>${esc(b)}</em>` : ""); };
 const fmt3 = (i) => String(i + 1).padStart(3, "0");
 const label = { i: -1, name: "", odoAnims: [], odoT: 0, nameAnims: [], nameT: 0, dir: 1 };
 
@@ -641,6 +692,7 @@ function nameSet(c, reveal = false) {
   if (label.name !== c.name) {
     nameL1.innerHTML = words(l1);
     nameL2.innerHTML = l2 ? words(l2) : "";
+    nameEl.classList.toggle("pt", PANTONE.test(c.name) && !ptDesc(c.name));             // Pantone : « 7401 C » sur une ligne
     label.name = c.name;
     fitName();
   }
@@ -672,7 +724,7 @@ function setBead(c) {
   if (!beadEl || !c) return;
   beadEl.style.setProperty("--c", c.hex);
   beadEl.style.setProperty("--metal", String(metal(c)));
-  beadEl.title = `${c.name} · ≈ ${c.hex.toUpperCase()} (approximation écran)`;
+  beadEl.title = `${spoken(c)} · ≈ ${c.hex.toUpperCase()} (approximation écran)`;
 }
 // Écrit l'étiquette. reveal : compteur à rouleaux + révélation du nom (au calage d'un changement)
 function writeSpec(c, reveal = false) {
@@ -680,7 +732,12 @@ function writeSpec(c, reveal = false) {
   label.i = c.i;
   nameSet(c, reveal);
   const code = $("specCode");
-  if (code) { code.textContent = c.code; code.setAttribute("aria-label", `Copier le code ${c.code}`); }
+  if (code) {
+    code.textContent = tagOf(c);
+    const what = isPantone(c) ? `la référence ${refOf(c)}` : `le code ${c.code}`;
+    code.setAttribute("aria-label", `Copier ${what}`);
+    code.title = isPantone(c) ? "Copier la référence" : "Copier le code";
+  }
   const fam = $("specFam"); if (fam) fam.textContent = famLabel(c.family);
   const fin = $("specFinish"); if (fin) fin.textContent = metal(c) ? "Métallisé" : "Uni";
   const fp = $("specFamPos");
@@ -776,7 +833,7 @@ function updateFav() {
   $("tFav")?.setAttribute("aria-label", `Favoris (${n})`);
   const sf = $("segFavN"); if (sf) sf.textContent = String(n);
   const sh = $("shareSel"); if (sh) sh.hidden = !(nu.fav && n > 0);
-  const cs = $("cmpSel"); if (cs) cs.hidden = !(nu.fav && n > 0);
+  const cs = $("cmpSel"); if (cs) cs.hidden = !COMPARE || !(nu.fav && n > 0);
 }
 
 function writeHash(h) {
@@ -789,7 +846,7 @@ function announce(i) {
   const live = $("fanLive");
   if (!live || !announceOn) return;
   const c = COLORS[i];
-  live.textContent = `${c.name}, ${famLabel(c.family)}, ${i + 1} sur ${COLORS.length}`;
+  live.textContent = `${spoken(c)}, ${famLabel(c.family)}, ${i + 1} sur ${COLORS.length}`;
 }
 
 function applyMeta() {
@@ -798,8 +855,8 @@ function applyMeta() {
   root.style.setProperty("--title", titleColor(c.hex, bandCache.get(c.code)));
   applyBg();
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", c.hex);
-  document.title = `${c.name} — Atelier 911`;
-  if (!isOpen("cmpPanel")) writeHash("#" + c.code);
+  document.title = `${isPantone(c) && !codeRedundant(c) ? `${c.name} · ${c.code}` : c.name} — SC 410`;
+  if (!isOpen("cmpPanel")) writeHash("#" + slug(c.code));
   updateFav();
   if (!userScrolling) previewSpec(null);
   markCurrent();
@@ -1026,7 +1083,7 @@ function askTilt() {
 }
 
 /* =====================================================================
-   L'Éventail : 152 lames laquées autour d'un pivot placé sous le bord bas
+   L'Éventail : une lame laquée par teinte, autour d'un pivot placé sous le bord bas
    Pendant la rotation : une seule écriture par image (transform du conteneur) ; les lames
    ne bougent qu'à la sélection (vague, ouverture), au survol et au dépliage d'arrivée. Un seul reflet
    (.fan-gloss), fixe à l'écran, couvre tout l'arc. Le texte n'est jamais tourné : étiquettes de
@@ -1047,7 +1104,7 @@ let userScrolling = false;   // rotation venue de l'utilisateur depuis le dernie
 let link = null;             // geste sur la voiture : l'éventail suit (mode lié)
 let suppressClick = false, suppressT = 0;
 
-const bladeLabel = (c) => `${c.name}, ${c.code}, ${famLabel(c.family)}${favs.has(c.code) ? ", favori" : ""}`;
+const bladeLabel = (c) => `${spoken(c)}, ${famLabel(c.family)}${favs.has(c.code) ? ", favori" : ""}`;
 
 function buildFan() {
   let a = 0, html = "";
@@ -1055,7 +1112,7 @@ function buildFan() {
   COLORS.forEach((c, i) => {
     if (i > 0) a += FAN.pitch + (c.family !== COLORS[i - 1].family ? FAN.gap : 0);
     fan.theta[i] = a;
-    html += `<div class="blade" role="option" id="bl-${esc(c.code)}" data-i="${i}" aria-selected="false" aria-label="${esc(bladeLabel(c))}"` +
+    html += `<div class="blade" role="option" id="bl-${cid(c)}" data-i="${i}" aria-selected="false" aria-label="${esc(bladeLabel(c))}"` +
       ` style="--c:${c.hex};--metal:${metal(c)};--a:${a.toFixed(3)}deg;--k:${i}"></div>`;
   });
   fanRot.innerHTML = html;
@@ -1346,7 +1403,7 @@ function bladeTip(i, extra = 0) {
   const phi = (fan.angle + eff(i)) / DEG, r = fan.R + o + extra;
   return { x: fan.cx + r * Math.sin(phi), y: fan.top + fan.tip + fan.R - r * Math.cos(phi) };
 }
-const thumbUrl = (c) => `img/thumb/${c.code}.webp${IV}`;
+const thumbUrl = (c) => `img/thumb/${encodeURIComponent(c.code)}.webp${IV}`;
 const thumbs = new Map();
 function preloadThumbs(i, r = 6) {
   for (let d = -r; d <= r; d++) {
@@ -1368,8 +1425,8 @@ function showCard(i, mode) {
     fanCard.style.setProperty("--c", c.hex);
     fanCard.style.setProperty("--metal", String(metal(c)));
     cardImg.src = thumbUrl(c);
-    cardName.textContent = c.name;
-    cardCode.textContent = c.code;
+    cardName.textContent = isPantone(c) ? heroName(c.name) : c.name;
+    cardCode.textContent = tagOf(c);
     if (mode === "scrub") preloadThumbs(i);
   }
   if (!fan.cardSized) { fan.cardW = fanCard.offsetWidth; fan.cardH = fanCard.offsetHeight; fan.cardSized = true; }
@@ -1572,7 +1629,7 @@ function wireFan() {
 const nuBody = $("nuBody"), qEl = $("q");
 const nu = { fav: false, q: "", tiles: [], secs: {}, cur: null, active: null, qT: 0, n: -1 };
 const finishOf = (c) => (metal(c) ? "Métallisé" : "Uni");
-const tileLabel = (c) => `${c.name}, ${c.code}, ${famLabel(c.family)}, ${finishOf(c).toLowerCase()}${favs.has(c.code) ? ", favori" : ""}`;
+const tileLabel = (c) => `${spoken(c)}, ${famLabel(c.family)}, ${finishOf(c).toLowerCase()}${favs.has(c.code) ? ", favori" : ""}`;
 
 function buildNuancier() {
   let html = "";
@@ -1581,9 +1638,9 @@ function buildNuancier() {
     html += `<section class="nu-sec" data-f="${k}" aria-labelledby="nuh-${k}"><h3 id="nuh-${k}">${label}<small class="mono">${famCount[k]}</small></h3><div class="nu-grid">`;
     for (let i = famStart[k]; i < famStart[k] + famCount[k]; i++) {
       const c = COLORS[i];
-      html += `<button class="nu-tile" type="button" id="nu-${esc(c.code)}" data-i="${i}" tabindex="-1" style="--c:${c.hex};--metal:${metal(c)}">` +
+      html += `<button class="nu-tile" type="button" id="nu-${cid(c)}" data-i="${i}" tabindex="-1" style="--c:${c.hex};--metal:${metal(c)}">` +
         `<span class="nu-thumb lq"><img src="${thumbUrl(c)}" alt="" width="640" height="256" loading="lazy" decoding="async"><span class="nu-fav">${HEART}</span></span>` +
-        `<span class="nu-name"><i class="lq" aria-hidden="true"></i><b>${esc(c.name)}</b></span><span class="mono">${esc(c.code)}</span></button>`;
+        `<span class="nu-name"><i class="lq" aria-hidden="true"></i><b>${nameHTML(c.name)}</b></span><span class="mono">${esc(tagOf(c))}</span></button>`;
     }
     html += `</div></section>`;
   });
@@ -1602,7 +1659,14 @@ function matcher(raw) {
   const famQ = new Set(q.length >= 3 ? FAMILIES.filter(([k, l, s]) =>
     norm(l).startsWith(q) || norm(s).startsWith(q) || k.startsWith(q) || (FAM_EN[k] ?? []).some((t) => t.startsWith(q))).map(([k]) => k) : []);
   const hq = q.replace(/^#/, "");
-  return (c) => norm(c.name).includes(q) || norm(c.code).includes(q) || (hq.length >= 2 && c.hex.slice(1).toLowerCase().startsWith(hq)) || famQ.has(c.family);
+  // Référence Pantone : « 7401 », « 7401c », « 7401 C », « pantone 7401 », « PMS 7401 »
+  const rq = squash(q).replace(/^(pantone|pms)/, "");
+  // Finition : « métallisé », « metallic », « métal » / « uni », « solid »
+  const fin = q.length >= 3 ? (["metallise", "metallic", "metal"].some((t) => t.startsWith(q)) ? 1
+    : ["uni", "unie", "solid", "solide"].some((t) => t.startsWith(q)) ? 0 : null) : null;
+  return (c) => norm(c.name).includes(q) || norm(c.code).includes(q) ||
+    (rq && (squash(heroName(c.name)).startsWith(rq) || squash(c.code).startsWith(rq))) ||
+    (hq.length >= 2 && c.hex.slice(1).toLowerCase().startsWith(hq)) || famQ.has(c.family) || (fin != null && metal(c) === fin);
 }
 const visibleTiles = () => nu.tiles.filter((t) => !t.hidden);
 
@@ -1623,15 +1687,15 @@ function nuFilter() {
   $("segFav")?.setAttribute("aria-pressed", String(nu.fav));
   if (n !== nu.n) { nu.n = n; const ct = $("nuCount"); if (ct) ct.textContent = plural(n, "teinte"); }
   const sh = $("shareSel"); if (sh) sh.hidden = !(nu.fav && favs.size > 0);
-  const cs = $("cmpSel"); if (cs) cs.hidden = !(nu.fav && favs.size > 0);
+  const cs = $("cmpSel"); if (cs) cs.hidden = !COMPARE || !(nu.fav && favs.size > 0);
   const em = $("nuEmpty");
   if (em) {
     em.hidden = n > 0;
     if (!n) {
       const q = nu.q.trim();
       em.innerHTML = q
-        ? `<p>Aucune teinte pour “${esc(q)}”</p><small>Essayez un nom, un code (M5R) ou une famille (vert, blue)</small><button class="btn" type="button" data-act="clear">Effacer la recherche</button>`
-        : `<p>Aucun favori — touchez ♥ sur une teinte</p><button class="btn" type="button" data-act="all">Voir les 152 teintes</button>`;
+        ? `<p>Aucune teinte pour “${esc(q)}”</p><small>Essayez une référence (${esc(slug((COLORS.find((c) => /^\d/.test(c.code)) ?? COLORS[0]).code))}), un nom ou une famille (vert, blue)</small><button class="btn" type="button" data-act="clear">Effacer la recherche</button>`
+        : `<p>Aucun favori — touchez ♥ sur une teinte</p><button class="btn" type="button" data-act="all">Voir les ${COLORS.length} teintes</button>`;
     } else em.textContent = "";
   }
   if (!nu.active || nu.active.hidden) {
@@ -1657,7 +1721,7 @@ function markNuCur(i) {
   nu.cur = t;
 }
 function updateTileFav(code) {
-  const i = codeIndex.get(code.toUpperCase());
+  const i = codeIndex.get(ckey(code));
   if (i == null) return;
   const c = COLORS[i], t = nu.tiles[i], b = fan.blades[i];
   if (t) { t.classList.toggle("is-fav", favs.has(c.code)); t.setAttribute("aria-label", tileLabel(c)); }
@@ -1777,8 +1841,8 @@ function openLpMenu(el) {
   lpMenu.innerHTML =
     `<div class="lp-head"><i class="lq" style="--c:${c.hex};--metal:${metal(c)}"></i><span>${esc(c.name)}</span></div>` +
     `<button type="button" role="menuitem" data-a="fav">${HEART}<span>${fav ? "Retirer des favoris" : "Ajouter aux favoris"}</span></button>` +
-    `<button type="button" role="menuitem" data-a="cmp"${i === idx ? " disabled" : ""}>${ICON_CMP}<span>Comparer avec la teinte affichée</span></button>` +
-    `<button type="button" role="menuitem" data-a="copy">${ICON_COPY}<span>Copier le code ${esc(c.code)}</span></button>`;
+    (COMPARE ? `<button type="button" role="menuitem" data-a="cmp"${i === idx ? " disabled" : ""}>${ICON_CMP}<span>Comparer avec la teinte affichée</span></button>` : "") +
+    `<button type="button" role="menuitem" data-a="copy">${ICON_COPY}<span>${isPantone(c) ? "Copier la référence" : `Copier le code ${esc(c.code)}`}</span></button>`;
   const t = bladeTip(i), w = 240;
   lpMenu.style.left = Math.round(clamp(t.x - w / 2, 8, innerWidth - w - 8)) + "px";
   lpMenu.style.top = "auto";
@@ -1814,7 +1878,7 @@ function wireLpMenu() {
     closeLpMenu();
     if (b.dataset.a === "fav") toggleFav(c.code);
     else if (b.dataset.a === "cmp") openCompare([dest(), i], { opener: fanList });
-    else if (b.dataset.a === "copy") toast((await copyText(c.code)) ? `Code ${c.code} copié` : "Copie impossible");
+    else if (b.dataset.a === "copy") toast((await copyText(refOf(c))) ? `${refOf(c)} copié` : "Copie impossible");
   });
   document.addEventListener("pointerdown", (e) => {
     if (lpMenu?.classList.contains("open") && !lpMenu.contains(e.target)) closeLpMenu();
@@ -1870,6 +1934,11 @@ function toast(msg, { action = null, duration } = {}) {
     t.append(b);
   }
   t.inert = false;
+  // centrage au pixel entier (pas de texte sur un demi-pixel)
+  t.style.left = t.style.width = ""; t.style.right = ""; t.style.margin = "";
+  const w = Math.ceil(t.getBoundingClientRect().width);
+  t.style.width = `${w}px`; t.style.margin = "0"; t.style.right = "auto";
+  t.style.left = `${Math.round((document.documentElement.clientWidth - w) / 2)}px`;
   t.classList.add("show");
   clearTimeout(toastT);
   toastT = setTimeout(hideToast, duration ?? (action ? 5000 : 2200));
@@ -1944,9 +2013,9 @@ function offerSelection(list) {
 }
 async function shareSelection() {
   if (!favs.size) return;
-  const url = location.href.split("#")[0] + "#sel=" + [...favs].join(".");
+  const url = location.href.split("#")[0] + "#sel=" + [...favs].map(slug).join(".");
   if (navigator.share) {
-    try { await navigator.share({ title: "Ma sélection — Atelier 911", url }); return; }
+    try { await navigator.share({ title: "Ma sélection — SC 410", url }); return; }
     catch (e) { if (e?.name === "AbortError") return; }
   }
   toast((await copyText(url)) ? "Lien de la sélection copié" : "Copie impossible");
@@ -2009,12 +2078,11 @@ function marks(c) {
   return { clar: Math.round(clamp(L, 0, 100)), sat: Math.round(clamp((Math.hypot(a, b) / 130) * 100, 0, 100)), notes: notes.slice(0, 2) };
 }
 const famOne = (k) => FAMILIES.find((f) => f[0] === k)?.[2] ?? "";
-const nameHTML = (name) => { const [a, b] = splitName(name); return esc(a) + (b ? ` <em>${esc(b)}</em>` : ""); };
 
 /* --- Images : rendu + masque « voiture seule », course gagnée par la dernière demande --- */
 const cxSize = (wi, min = 2000) => SIZES.find((s) => s >= Math.max(min, wi * (devicePixelRatio || 1))) ?? SIZES[SIZES.length - 1];
 function cxImg(el, c, size, masked) {
-  const url = `img/${size}/${c.code}.webp${IV}`, mk = masked ? `img/${size}/_car.webp${IV}` : "";
+  const url = `img/${size}/${encodeURIComponent(c.code)}.webp${IV}`, mk = masked ? `img/${size}/_car.webp${IV}` : "";
   const want = url + "|" + mk;
   el.dataset.want = want;
   const box = el.closest(".cx-car");
@@ -2058,11 +2126,11 @@ function cxPoolImg(code) {
 
 /* --- Finalistes --- */
 function defaultFinalists(i = dest()) {
-  const f = [...favs].map((code) => codeIndex.get(code.toUpperCase())).filter((j) => j != null && j !== i);
+  const f = [...favs].map((code) => codeIndex.get(ckey(code))).filter((j) => j != null && j !== i);
   return f.length ? [i, ...f].slice(0, CX_MAX) : [i, (i + 1) % COLORS.length];
 }
 function favFinalists() {
-  const f = [...favs].map((code) => codeIndex.get(code.toUpperCase())).filter((j) => j != null).slice(0, CX_MAX);
+  const f = [...favs].map((code) => codeIndex.get(ckey(code))).filter((j) => j != null).slice(0, CX_MAX);
   return f.length ? f : [dest()];
 }
 function cxNormalise(list) {
@@ -2075,7 +2143,7 @@ const defaultStudio = () => "gris";            // « Gris neutre » par défaut,
 
 function cxHash() {
   if (!isOpen("cmpPanel")) return;
-  writeHash(`#cmp=${cx.list.map((i) => COLORS[i].code).join(",")}&m=${cx.mode}&s=${cxStudioParam(cx.studio)}`);
+  writeHash(`#cmp=${cx.list.map((i) => slug(COLORS[i].code)).join(",")}&m=${cx.mode}&s=${cxStudioParam(cx.studio)}`);
 }
 function cxSay(msg) { const l = $("cxLive"); if (l) { l.textContent = ""; l.textContent = msg; } }
 
@@ -2144,9 +2212,9 @@ function cxStrip() {
     const c = COLORS[i];
     return `<li class="cx-fin${out.has(i) ? " out" : ""}${cx.mode === "rideau" && cx.pair.includes(i) ? " in-pair" : ""}" data-i="${i}" style="--c:${c.hex};--metal:${metal(c)}">` +
       `<button class="cx-fin-b" type="button" data-i="${i}" aria-roledescription="finaliste" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight" ` +
-      `aria-label="${esc(c.name)}, ${c.code}, finaliste ${k + 1} sur ${n}${out.has(i) ? ", écartée" : ""}. Alt et flèches pour déplacer.">` +
+      `aria-label="${esc(spoken(c))}, finaliste ${k + 1} sur ${n}${out.has(i) ? ", écartée" : ""}. Alt et flèches pour déplacer.">` +
       `<span class="cx-n mono">${String(k + 1).padStart(2, "0")}</span><i class="bead"></i>` +
-      `<span class="cx-fin-t"><b>${esc(heroName(c.name))}</b><span class="mono">${c.code}</span></span></button>` +
+      `<span class="cx-fin-t"><b>${esc(heroName(c.name))}</b><span class="mono">${esc(tagOf(c))}</span></span></button>` +
       `<button class="cx-x" type="button" data-x="${i}" aria-label="Retirer ${esc(c.name)}"${n <= CX_MIN ? " disabled" : ""}>${ICON_X}</button></li>`;
   }).join("") +
     (n < CX_MAX ? `<li class="cx-addw"><button class="cx-add" id="cxAdd" type="button" aria-haspopup="dialog" aria-expanded="${cx.pop.open}" aria-controls="cxPop">` +
@@ -2159,7 +2227,7 @@ function cellHTML(i, k, best, extra = "") {
   return `<div class="cx-cell" data-i="${i}" data-k="${k}" style="--c:${c.hex};--metal:${metal(c)}"${extra}>` +
     `<div class="cx-car"><div class="cx-crop"><span class="cx-shadow"></span></div><span class="cx-flat mono">${esc(NOIMG_MSG)}</span></div>` +
     `<div class="cx-meta">` +
-      `<p class="cx-id"><i class="bead"></i><span class="cx-nm">${nameHTML(c.name)}</span><span class="mono">${c.code}</span></p>` +
+      `<p class="cx-id"><i class="bead"></i><span class="cx-nm">${nameHTML(c.name)}</span><span class="mono">${esc(tagOf(c))}</span></p>` +
       `<dl class="cx-rep">` +
         `<div><dt>Famille · Finition</dt><dd>${esc(famOne(c.family))} · ${finishOf(c)}</dd></div>` +
         `<div><dt>Clarté</dt><dd><span class="cx-meter"><i style="width:${m.clar}px"></i></span><span class="mono">${m.clar}${up(best.clar === i)}</span></dd></div>` +
@@ -2195,7 +2263,7 @@ function cxCells(v) {
 
 function cxRideau(v) {
   const [a, b] = cx.pair.map(cxColor);
-  const lab = (c, s) => `<div class="cx-rlab ${s}"><span class="mono">${s.toUpperCase()} · ${c.code}</span><b>${nameHTML(c.name)}</b></div>`;
+  const lab = (c, s) => `<div class="cx-rlab ${s}"><span class="mono">${s.toUpperCase()} · ${esc(tagOf(c))}</span><b>${nameHTML(c.name)}</b></div>`;
   const side = (c, s) => `<div class="cx-rs ${s}" style="--c:${c.hex}"><div class="cx-car"><div class="cx-crop"><span class="cx-shadow"></span>` +
     `<img alt="" decoding="async" draggable="false" style="visibility:hidden"></div><span class="cx-flat mono">${esc(NOIMG_MSG)}</span></div></div>`;
   const chips = cx.list.length > 2 ? `<div class="cx-pair" role="group" aria-label="Teintes du rideau">` + cx.list.map((i) => {
@@ -2209,13 +2277,13 @@ function cxRideau(v) {
 }
 
 function cxVerdict(v) {
-  const d = cx.duel, c = COLORS[d.winner], [n1, n2] = splitName(c.name);
+  const d = cx.duel, c = COLORS[d.winner];
   const out = d.out.map((i) => esc(heroName(COLORS[i].name)));
   v.innerHTML = `<div class="cx-verdict" style="--c:${c.hex};--metal:${metal(c)}">` +
-    `<div class="cx-car big"><div class="cx-crop"><span class="cx-shadow"></span><img alt="Porsche 911 en ${esc(c.name)}" decoding="async" draggable="false" style="visibility:hidden"></div>` +
+    `<div class="cx-car big"><div class="cx-crop"><span class="cx-shadow"></span><img alt="Voiture en ${esc(spoken(c))}" decoding="async" draggable="false" style="visibility:hidden"></div>` +
     `<span class="cx-flat mono">${esc(NOIMG_MSG)}</span></div>` +
-    `<div class="cx-vtxt"><p class="mono">Votre teinte · ${c.code}</p>` +
-    `<h3 id="cxWin">${esc(n1)}${n2 ? ` <em>${esc(n2)}</em>` : ""}</h3>` +
+    `<div class="cx-vtxt"><p class="mono">Votre teinte · ${esc(tagOf(c))}</p>` +
+    `<h3 id="cxWin">${nameHTML(c.name)}</h3>` +
     `<p class="cx-vsub">${esc(famOne(c.family))} · ${finishOf(c)}${out.length ? `<span> — devant ${out.join(", ")}</span>` : ""}</p>` +
     `<div class="cx-vbtns"><button class="btn cx-pri" id="cxShow" type="button">L'afficher dans le showroom</button>` +
     `<button class="btn" id="cxAgain" type="button">Recommencer le duel</button>` +
@@ -2440,7 +2508,7 @@ function cxShowWinner() {
 }
 async function cxShare() {
   const d = cx.duel, codes = d?.winner != null ? [d.winner, ...cx.list.filter((i) => i !== d.winner)] : cx.list;
-  const url = location.href.split("#")[0] + `#cmp=${codes.map((i) => COLORS[i].code).join(",")}&m=cote&s=${cxStudioParam(cx.studio)}`;
+  const url = location.href.split("#")[0] + `#cmp=${codes.map((i) => slug(COLORS[i].code)).join(",")}&m=cote&s=${cxStudioParam(cx.studio)}`;
   toast((await copyText(url)) ? "Lien du face à face copié" : "Copie impossible");
 }
 
@@ -2560,10 +2628,10 @@ function cxPopFill(q) {
   const list = $("cxList"), m = matcher(q);
   if (!list) return;
   const taken = new Set(cx.list);
-  const opt = (c, pre) => `<div class="cx-opt" role="option" id="cxo-${pre}${c.code}" data-i="${c.i}" aria-disabled="${taken.has(c.i)}" aria-selected="false" style="--c:${c.hex};--metal:${metal(c)}">` +
-    `<i class="bead"></i><span>${esc(c.name)}</span><span class="mono">${taken.has(c.i) ? "déjà là" : c.code}</span></div>`;
+  const opt = (c, pre) => `<div class="cx-opt" role="option" id="cxo-${pre}${cid(c)}" data-i="${c.i}" aria-disabled="${taken.has(c.i)}" aria-selected="false" style="--c:${c.hex};--metal:${metal(c)}">` +
+    `<i class="bead"></i><span>${esc(c.name)}</span><span class="mono">${taken.has(c.i) ? "déjà là" : esc(tagOf(c))}</span></div>`;
   let html = "";
-  const fl = [...favs].map((code) => COLORS[codeIndex.get(code.toUpperCase())]).filter((c) => c && (!m || m(c)));
+  const fl = [...favs].map((code) => COLORS[codeIndex.get(ckey(code))]).filter((c) => c && (!m || m(c)));
   if (fl.length) html += `<div role="group" aria-labelledby="cxg-f"><p class="cx-gh mono" id="cxg-f">Vos favoris</p>${fl.map((c) => opt(c, "f-")).join("")}</div>`;
   for (const [k, lbl] of FAMILIES) {
     const l = COLORS.filter((c) => c.family === k && (!m || m(c)));
@@ -2900,7 +2968,7 @@ function wireViewPointer(v) {
 
 let cmp = null;
 function openCompare(list = defaultFinalists(), { mode = null, studio = null, opener = $("btnCompare") } = {}) {
-  if (!cmp || !started) return;
+  if (!COMPARE || !cmp || !started) return;
   openPanel("cmpPanel", opener, () => fine.matches ? cxPanel().querySelector('[data-m][aria-pressed="true"]') : $("closeCmp"));
   cmp.open(list, mode, studio);
 }
@@ -2918,7 +2986,7 @@ function openPanel(id, opener = document.activeElement, pickFocus = null) {
   if (!anyPanel()) lastFocus = opener;
   closeMenu(false);
   closeFloating();
-  if (isOpen("cmpPanel") && id !== "cmpPanel") writeHash("#" + COLORS[idx].code);
+  if (isOpen("cmpPanel") && id !== "cmpPanel") writeHash("#" + slug(COLORS[idx].code));
   document.querySelectorAll(".panel.open").forEach((x) => x !== panel && x.classList.remove("open"));
   panel.classList.add("open");
   panelOpen = true;
@@ -2943,7 +3011,7 @@ function closePanels() {
   closeMenu(false);
   if (!any) return;
   panelOpen = false;
-  if (wasCmp && COLORS.length) writeHash("#" + COLORS[idx].code);
+  if (wasCmp && COLORS.length) writeHash("#" + slug(COLORS[idx].code));
   background().forEach((el) => (el.inert = false));        // avant de rendre le focus (sinon impossible)
   const f = lastFocus && lastFocus.isConnected && lastFocus !== document.body && lastFocus.offsetParent !== null ? lastFocus : fanList;
   lastFocus = null;
@@ -2968,7 +3036,9 @@ function closeMenu(restoreFocus = true) {
 
 const FORMATS = { story: [1080, 1920, 1.6], square: [2000, 2000, 1.3], wide: [2560, 1440, 1.4] };
 const loadImg = (src) => new Promise((ok, ko) => { const im = new Image(); im.onload = () => ok(im); im.onerror = ko; im.src = src; });
-const TITLE_FONT = (px) => `500 ${px}px "Poppins", "Helvetica Neue", Arial, sans-serif`;
+const DISPLAY_STACK = '"Archivo Expanded", "Archivo Expanded Fallback", "Helvetica Neue", Arial, sans-serif';
+const MONO_STACK = '"Fragment Mono", "Fragment Mono Fallback", ui-monospace, Menlo, monospace';
+const TITLE_FONT = (px, w = 400) => `${w} ${px}px ${DISPLAY_STACK}`;
 let exporting = false;
 function setMenuDisabled(on) { $("menu")?.querySelectorAll("button").forEach((b) => (b.disabled = on)); }
 
@@ -2979,14 +3049,13 @@ async function exportImage(fmt, c = COLORS[idx]) {
   try {
     const [W, H, zf] = FORMATS[fmt];
     toast("Préparation…", { duration: 20000 });
-    const hero = heroName(c.name);
-    const [bg, mask] = await Promise.all([
-      loadImg(`img/3500/${c.code}.webp${IV}`).catch(() => loadImg(`img/2000/${c.code}.webp${IV}`)),
-      loadImg(`img/3500/_mask.webp${IV}`),
+    const [bg] = await Promise.all([
+      loadImg(`img/3500/${encodeURIComponent(c.code)}.webp${IV}`).catch(() => loadImg(`img/2000/${encodeURIComponent(c.code)}.webp${IV}`)),
       Promise.all([
-        document.fonts.load(TITLE_FONT(100), hero),
-        document.fonts.load('500 40px "Poppins"', c.name),
-        document.fonts.load('400 20px "DM Mono"'),
+        document.fonts.load(TITLE_FONT(40), c.name),
+        document.fonts.load(TITLE_FONT(40, 200), c.name),
+        document.fonts.load(TITLE_FONT(40, 600), "SC 410"),
+        document.fonts.load(`400 20px ${MONO_STACK}`, "Nº 0123456789 · ≈ #ABCDEF PANTONE"),
       ]).catch(() => {}),
     ]);
     const k = Math.max(W / bg.width, H / bg.height) * zf;
@@ -2996,57 +3065,53 @@ async function exportImage(fmt, c = COLORS[idx]) {
     o.imageSmoothingQuality = "high";
     o.drawImage(bg, x, y, w, h);
 
-    // Nom en Poppins, une seule fois, derrière la voiture
-    const txt = Object.assign(document.createElement("canvas"), { width: W, height: H });
-    const t = txt.getContext("2d");
-    const setTitleFont = (px) => {
-      t.font = TITLE_FONT(px);
-      if ("letterSpacing" in t) t.letterSpacing = `${(-0.02 * px).toFixed(2)}px`;
-    };
-    setTitleFont(100);
-    let size = Math.min((100 * W * 0.9) / t.measureText(hero).width, H * 0.17);
-    setTitleFont(size);
-    const wFit = t.measureText(hero).width;                 // opsz auto : recalage si le dessin s'élargit
-    if (wFit > W * 0.9) { size *= (W * 0.9) / wFit; setTitleFont(size); }
-    t.textAlign = "center"; t.textBaseline = "alphabetic";
-    t.fillStyle = titleColor(c.hex, bandCache.get(c.code));
-    t.fillText(hero, W / 2, y + h * ROOF + (1 - T_CLEAR) * P_CAP * size);   // même calage que le showroom
-    t.globalCompositeOperation = "destination-in";
-    t.imageSmoothingQuality = "high";
-    t.drawImage(mask, x, y, w, h);
-    o.drawImage(txt, 0, 0);
 
     const g = o.createLinearGradient(0, H * 0.72, 0, H);
     g.addColorStop(0, "rgba(10,10,11,0)"); g.addColorStop(1, "rgba(10,10,11,.75)");
     o.fillStyle = g; o.fillRect(0, H * 0.72, W, H * 0.28);
     const cs = Math.round(Math.min(W, H) * 0.03), pad = Math.round(Math.min(W, H) * 0.06);
-    // Perle de laque + nom en Poppins (le même système que l'étiquette)
+    // Perle de laque + nom en Archivo Expanded (le même système que l'étiquette)
     const br = Math.round(cs * 0.9), bx = pad + br, by = H - pad - cs * 1.7;
     const bg2 = o.createRadialGradient(bx - br * 0.35, by - br * 0.45, 0, bx, by, br);
     bg2.addColorStop(0, "rgba(255,255,255,.75)"); bg2.addColorStop(0.2, c.hex); bg2.addColorStop(1, c.hex);
     o.fillStyle = bg2; o.beginPath(); o.arc(bx, by, br, 0, Math.PI * 2); o.fill();
     o.fillStyle = "#f4f2ee"; o.textAlign = "left";
-    o.font = `500 ${Math.round(cs * 1.5)}px "Poppins", "Helvetica Neue", Arial, sans-serif`;
-    o.fillText(c.name, pad + br * 2 + cs * 0.8, H - pad - cs * 1.2);
+    o.font = TITLE_FONT(Math.round(cs * 1.5));
+    // Même traitement que l'étiquette : héros (« 7401 C ») ; la mention PANTONE / le code passe sur la ligne mono
+    const ex = pad + br * 2 + Math.round(cs * 0.8);
+    if (isPantone(c)) {
+      const [h1, h2] = splitName(c.name);
+      o.fillText(h1, ex, H - pad - Math.round(cs * 1.2));
+      if (h2) {
+        const hx = ex + Math.round(o.measureText(h1 + " ").width);
+        o.font = TITLE_FONT(Math.round(cs * 1.5), 200);
+        o.fillText(h2, hx, H - pad - Math.round(cs * 1.2));
+      }
+    } else o.fillText(c.name, ex, H - pad - Math.round(cs * 1.2));
     o.fillStyle = "rgba(244,242,238,.6)";
-    o.font = `400 ${Math.round(cs * 0.55)}px "DM Mono", monospace`;
-    o.fillText(`Nº ${fmt3(c.i)} · ${c.code} · ≈ ${c.hex.toUpperCase()}`, pad + br * 2 + cs * 0.8, H - pad);
-    // Logo en haut à gauche (SVG clair, proportions 951 × 318)
-    try {
-      const logo = new Image();
-      logo.src = "logo/atelier911-logo-clair.svg";
-      await logo.decode();
-      const lw = Math.round(Math.min(W, H) * 0.2);
-      o.drawImage(logo, pad, pad, lw, Math.round(lw * 318 / 951));
-    } catch {}
+    o.font = `400 ${Math.round(cs * 0.55)}px ${MONO_STACK}`;
+    if ("letterSpacing" in o) o.letterSpacing = `${Math.round(cs * 0.55 * 0.06)}px`;
+    o.fillText(`Nº ${fmt3(c.i)} · ${tagOf(c)} · ≈ ${c.hex.toUpperCase()}`, ex, H - pad);
+    // Logo en haut à gauche : « SC 410 » — Archivo Expanded, SC en 600, 410 en 300 (comme l'en-tête)
+    const ls = Math.round(Math.min(W, H) * 0.026);
+    o.fillStyle = "rgba(244,242,238,.92)";
+    if ("letterSpacing" in o) o.letterSpacing = `${Math.round(ls * 0.16)}px`;
+    o.textBaseline = "top";
+    o.font = TITLE_FONT(ls, 600);
+    o.fillText("SC ", pad, pad);
+    const lx = pad + Math.round(o.measureText("SC ").width);
+    o.font = TITLE_FONT(ls, 300);
+    o.fillText("410", lx, pad);
+    if ("letterSpacing" in o) o.letterSpacing = "0px";
+    o.textBaseline = "alphabetic";
 
     const blob = await new Promise((r) => out.toBlob(r, "image/png"));
     if (!blob) throw new Error("toBlob");
-    const name = `911-${c.code}-${fmt}.png`;
+    const name = `SC410-${slug(c.code).replace(/[^A-Za-z0-9_-]/g, "")}-${fmt}.png`;
     let file = null;
     try { file = new File([blob], name, { type: "image/png" }); } catch {}
     if (file && navigator.canShare?.({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: `Porsche 911 en ${c.name}` }); hideToast(); return; }
+      try { await navigator.share({ files: [file], title: `${c.name} — SC 410` }); hideToast(); return; }
       catch (e) { if (e?.name === "AbortError") { hideToast(); return; } }   // autre erreur : on télécharge
     }
     const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
@@ -3060,9 +3125,9 @@ async function exportImage(fmt, c = COLORS[idx]) {
 }
 
 async function share() {
-  const c = COLORS[idx], url = location.href.split("#")[0] + "#" + c.code;
+  const c = COLORS[idx], url = location.href.split("#")[0] + "#" + slug(c.code);
   if (navigator.share) {
-    try { await navigator.share({ title: `Porsche 911 en ${c.name}`, text: `${c.name} (${c.code})`, url }); return; }
+    try { await navigator.share({ title: `${c.name} — SC 410`, text: `${refOf(c) === c.code ? `${c.name} (${c.code})` : refOf(c)} · Nuancier SC 410`, url }); return; }
     catch (e) { if (e?.name === "AbortError") return; }
   }
   toast((await copyText(url)) ? "Lien copié" : "Copie impossible");
@@ -3075,7 +3140,7 @@ function parseHash(h = location.hash) {
   try { s = decodeURIComponent(s); } catch {}
   s = s.trim();
   if (!s) return null;
-  const find = (x) => codeIndex.get(x.trim().toUpperCase());
+  const find = (x) => codeIndex.get(ckey(x));
   const m = /^(cmp|sel)=([^&?]*)(.*)$/i.exec(s);
   if (m) {
     const type = m[1].toLowerCase();
@@ -3102,8 +3167,12 @@ function onHashChange() {
     if (anyPanel()) closePanels();
     if (r.i === dest()) { centreFan(r.i); return; }
     goTo(r.i, D.paint);
-  } else if (r.type === "cmp") openCompare(r.list, { mode: r.mode, studio: r.studio });
-  else if (r.type === "sel") { writeHash("#" + COLORS[idx].code); offerSelection(r.list); }
+  } else if (r.type === "cmp" && COMPARE) openCompare(r.list, { mode: r.mode, studio: r.studio });
+  else if (r.type === "cmp") {                       // comparateur retiré : première teinte du lien, vue normale
+    if (anyPanel()) closePanels();
+    if (r.list[0] !== dest()) goTo(r.list[0], D.paint);
+    writeHash("#" + slug(COLORS[r.list[0]].code));
+  } else if (r.type === "sel") { writeHash("#" + slug(COLORS[idx].code)); offerSelection(r.list); }
 }
 
 /* ---------- Clavier (enregistré tout de suite ; inactif tant que les teintes ne sont pas chargées) ---------- */
@@ -3136,7 +3205,7 @@ addEventListener("keydown", (e) => {
   } else if (e.repeat) return;
   else if (key === "/") { e.preventDefault(); openNuancier({ focus: "search", opener: $("tSearch") }); }
   else if (key === "g") { e.preventDefault(); openNuancier(); }
-  else if (key === "c") { e.preventDefault(); openCompare(); }
+  else if (key === "c" && COMPARE) { e.preventDefault(); openCompare(); }
   else if (key === "f") { e.preventDefault(); toggleFav(); }
 });
 
@@ -3177,8 +3246,8 @@ function wire() {
   on("shareSel", shareSelection);
   on("cmpSel", () => openCompare(favFinalists(), { opener: $("cmpSel") }));
   on("specCode", async () => {
-    const code = COLORS[idx].code;
-    toast((await copyText(code)) ? `Code ${code} copié` : "Copie impossible");
+    const c = COLORS[idx], ref = refOf(c);
+    toast((await copyText(ref)) ? (isPantone(c) ? `${ref} copié` : `Code ${ref} copié`) : "Copie impossible");
   });
   on("btnExport", (e) => {
     e.stopPropagation();
@@ -3218,23 +3287,26 @@ function wire() {
 async function start(data) {
   COLORS = deckOrder(data
     .filter((c) => c && typeof c.code === "string" && /^#[0-9a-f]{6}$/i.test(c.hex) && c.name)
-    .map((c) => ({ ...c, family: c.family === "rose" ? "violet" : FAMILY_ORDER.includes(c.family) ? c.family : "gris" })));
+    .map((c) => ({ ...c, code: c.code.trim(), name: String(c.name).trim(), family: famKey(c.family) })));
   if (!COLORS.length) throw new Error("colors.json vide");
   codeIndex.clear();
   famStart = {}; famCount = {};
   COLORS.forEach((c, i) => {
-    c.i = i; codeIndex.set(c.code.toUpperCase(), i);
+    c.i = i; codeIndex.set(ckey(c.code), i);
     if (famStart[c.family] == null) famStart[c.family] = i;
     famCount[c.family] = (famCount[c.family] ?? 0) + 1;
   });
+  // Favoris d'une ancienne liste de teintes : ignorés (en mémoire seulement) s'ils n'existent plus
+  [...favs].forEach((code) => { if (!codeIndex.has(ckey(code))) favs.delete(code); });
+  const allN = $("segAllN"); if (allN) allN.textContent = String(COLORS.length);
 
   measure();
   const r = parseHash();
   let initCmp = null, initSel = null;
   if (r?.type === "code") idx = r.i;
-  else if (r?.type === "cmp") { idx = r.list[0]; initCmp = r; }
+  else if (r?.type === "cmp") { idx = r.list[0]; initCmp = COMPARE ? r : null; if (!COMPARE) writeHash("#" + slug(COLORS[idx].code)); }
   else if (r?.type === "sel") { idx = r.list[0]; initSel = r.list; }
-  else idx = codeIndex.get("5ZA") ?? 0;
+  else idx = 0;                                                 // pas de lien (ou code inconnu) : première teinte du nuancier
 
   setHintText();
   if (hinted) $("hint")?.classList.add("gone");
@@ -3306,7 +3378,7 @@ async function boot() {
   if (bootEl && bootEl.innerHTML !== bootHTML) bootEl.innerHTML = bootHTML;
   let data;
   try {
-    const res = await fetch("colors.json", attempt++ ? { cache: "reload" } : undefined);
+    const res = await fetch(`colors.json${IV}`, attempt++ ? { cache: "reload" } : undefined);
     if (!res.ok) throw new Error(String(res.status));
     data = await res.json();
     if (!Array.isArray(data) || !data.length) throw new Error("format");
